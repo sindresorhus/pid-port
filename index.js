@@ -43,7 +43,7 @@ const parsePid = pid => {
 
 const getPort = (port, list) => {
 	const regex = new RegExp(`[.:]${port}$`);
-	const foundPort = list.find(value => regex.test(value[addressColumn]));
+	const foundPort = list.find(line => regex.test(line[addressColumn]));
 
 	if (!foundPort) {
 		throw new Error(`Could not find a process that uses port \`${port}\``);
@@ -57,14 +57,14 @@ const getList = async () => {
 
 	return list
 		.split('\n')
-		.filter(item => isProtocol(item))
-		.map(item => item.match(/\S+/g) || []);
+		.filter(line => isProtocol(line))
+		.map(line => line.match(/\S+/g) || []);
 };
 
 module.exports.portToPid = async port => {
 	if (Array.isArray(port)) {
 		const list = await getList();
-		const tuples = await Promise.all(port.map(value => [value, getPort(value, list)]));
+		const tuples = await Promise.all(port.map(port_ => [port_, getPort(port_, list)]));
 		return new Map(tuples);
 	}
 
@@ -79,10 +79,10 @@ module.exports.all = async () => {
 	const list = await getList();
 	const returnValue = new Map();
 
-	for (const item of list) {
-		const {groups} = /[^]*[.:](?<port>\d+)$/.exec(item[addressColumn]);
+	for (const line of list) {
+		const {groups} = /[^]*[.:](?<port>\d+)$/.exec(line[addressColumn]);
 		if (groups) {
-			returnValue.set(Number.parseInt(groups.port, 10), parsePid(item[portColumn]));
+			returnValue.set(Number.parseInt(groups.port, 10), parsePid(line[portColumn]));
 		}
 	}
 
