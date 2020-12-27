@@ -1,10 +1,12 @@
 {
 	"name": "pid-port",
-	"version": "0.0.0",
+	"version": "0.1.0",
 	"description": "Get the ID of the process that uses a certain port",
 	"license": "MIT",
 	"repository": "sindresorhus/pid-port",
-	"funding": "https://github.com/sponsors/sindresorhus",
+	"funding": {
+		"url": "https://github.com/sponsors/sindresorhus"
+	},
 	"engines": {
 		"node": ">=10"
 	},
