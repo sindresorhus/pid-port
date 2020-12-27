@@ -57,7 +57,7 @@ const getPort = (port, list) => {
 const getList = async () => {
 	const list = await getListFunction();
 
-	return list.split('\n').filter(item => isProtocol(item)).map(item => /\S+/g.exec(item) || []);
+	return list.split('\n').filter(item => isProtocol(item)).map(item => [.../\S+/g.exec(item)] || []);
 };
 
 module.exports.portToPid = async port => {
