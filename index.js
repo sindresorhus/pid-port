@@ -15,13 +15,13 @@ const macos = async () => {
 	return result.join('\n');
 };
 
-const linux = () => {
-	const {stdout} = execa('ss', ['-tunlp']);
+const linux = async () => {
+	const {stdout} = await execa('ss', ['-tunlp']);
 	return stdout;
 };
 
 const win32 = async () => {
-	const {stdout} = execa('netstat', ['-ano']);
+	const {stdout} = await execa('netstat', ['-ano']);
 	return stdout;
 };
 
