@@ -79,7 +79,7 @@ module.exports.all = async () => {
 	for (const item of list) {
 		const {groups} = /[^]*[.:](?<port>\d+)$/.exec(item[addressColumn]);
 		if (groups) {
-			returnValue.set(Number.parseInt(match.groups.port, 10), parsePid(item[portColumn]));
+			returnValue.set(Number.parseInt(groups.port, 10), parsePid(item[portColumn]));
 		}
 	}
 
