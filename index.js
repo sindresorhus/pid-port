@@ -58,7 +58,7 @@ const getList = async () => {
 	return list
 		.split('\n')
 		.filter(item => isProtocol(item))
-		.map(item => /\S+/g.exec(item) || []);
+		.map(item => item.match(/\S+/g) || []);
 };
 
 module.exports.portToPid = async port => {
