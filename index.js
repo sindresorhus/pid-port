@@ -34,12 +34,12 @@ const parsePid = pid => {
 		return;
 	}
 
-	const match = /(?:^|",|",pid=)(\d+)/.exec(pid);
+	const match = /(?:^|",|",pid=)(?<pid>\d+)/.exec(pid);
 	if (!match) {
 		return;
 	}
 
-	return Number.parseInt(match[1], 10);
+	return Number.parseInt(match.groups.pid, 10);
 };
 
 const getPort = (port, list) => {
@@ -56,7 +56,7 @@ const getPort = (port, list) => {
 const getList = async () => {
 	const list = await getListFunction();
 
-	return list.split('\n').filter(item => isProtocol(item)).map(item => item.match(/\S+/g) || []);
+	return list.split('\n').filter(item => isProtocol(item)).map(item => /\S+/g.exec(item) || []);
 };
 
 module.exports.portToPid = async port => {
