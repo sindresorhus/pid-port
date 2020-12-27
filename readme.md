@@ -59,3 +59,7 @@ Ports to look up.
 Get all process IDs from ports.
 
 Returns a `Promise<Map<number, number>>` with the port as key and the process ID as value.
+
+## Related
+
+- [fkill-cli](https://github.com/sindresorhus/fkill-cli) - Uses this package to let you kill the process that occupies a certain port
