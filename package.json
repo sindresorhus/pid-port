@@ -1,6 +1,6 @@
 {
 	"name": "pid-port",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Get the ID of the process that uses a certain port",
 	"license": "MIT",
 	"repository": "sindresorhus/pid-port",
