@@ -35,12 +35,10 @@ const parsePid = pid => {
 		return;
 	}
 
-	const match = /(?:^|",|",pid=)(?<pid>\d+)/.exec(pid);
-	if (!match) {
-		return;
+	const {groups} = /(?:^|",|",pid=)(?<pid>\d+)/.exec(pid);
+	if (groups) {
+		return Number.parseInt(groups.pid, 10);
 	}
-
-	return Number.parseInt(match.groups.pid, 10);
 };
 
 const getPort = (port, list) => {
@@ -57,7 +55,7 @@ const getPort = (port, list) => {
 const getList = async () => {
 	const list = await getListFunction();
 
-	return list.split('\n').filter(item => isProtocol(item)).map(item => [.../\S+/g.exec(item)] || []);
+	return list.split('\n').filter(item => isProtocol(item)).map(item => /\S+/g.exec(item) || []);
 };
 
 module.exports.portToPid = async port => {
@@ -79,8 +77,8 @@ module.exports.all = async () => {
 	const returnValue = new Map();
 
 	for (const item of list) {
-		const match = /[^]*[.:](?<port>\d+)$/.exec(item[addressColumn]);
-		if (match) {
+		const {groups} = /[^]*[.:](?<port>\d+)$/.exec(item[addressColumn]);
+		if (groups) {
 			returnValue.set(Number.parseInt(match.groups.port, 10), parsePid(item[portColumn]));
 		}
 	}
