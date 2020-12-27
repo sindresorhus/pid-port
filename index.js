@@ -26,7 +26,8 @@ const win32 = async () => {
 };
 
 const getListFunction = process.platform === 'darwin' ? macos : (process.platform === 'linux' ? linux : win32);
-const columns = process.platform === 'darwin' ? [3, 8] : (process.platform === 'linux' ? [4, 6] : [1, 4]);
+const addressColumn = process.platform === 'darwin' ? 3 : (process.platform === 'linux' ? 4 : 1);
+const portColumn = process.platform === 'darwin' ? 8 : (process.platform === 'linux' ? 6 : 4);
 const isProtocol = value => /^\s*(tcp|udp)/i.test(value);
 
 const parsePid = pid => {
@@ -44,13 +45,13 @@ const parsePid = pid => {
 
 const getPort = (port, list) => {
 	const regex = new RegExp(`[.:]${port}$`);
-	const foundPort = list.find(value => regex.test(value[columns[0]]));
+	const foundPort = list.find(value => regex.test(value[addressColumn]));
 
 	if (!foundPort) {
 		throw new Error(`Could not find a process that uses port \`${port}\``);
 	}
 
-	return parsePid(foundPort[columns[1]]);
+	return parsePid(foundPort[portColumn]);
 };
 
 const getList = async () => {
@@ -78,9 +79,9 @@ module.exports.all = async () => {
 	const returnValue = new Map();
 
 	for (const item of list) {
-		const match = /[^]*[.:](?<port>\d+)$/.exec(item[columns[0]]);
+		const match = /[^]*[.:](?<port>\d+)$/.exec(item[addressColumn]);
 		if (match) {
-			returnValue.set(Number.parseInt(match.groups.port, 10), parsePid(item[columns[1]]));
+			returnValue.set(Number.parseInt(match.groups.port, 10), parsePid(item[portColumn]));
 		}
 	}
 
