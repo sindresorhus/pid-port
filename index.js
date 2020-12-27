@@ -78,9 +78,9 @@ module.exports.all = async () => {
 	const returnValue = new Map();
 
 	for (const item of list) {
-		const match = /[^]*[.:](\d+)$/.exec(item[columns[0]]);
+		const match = /[^]*[.:](?<port>\d+)$/.exec(item[columns[0]]);
 		if (match) {
-			returnValue.set(Number.parseInt(match[1], 10), parsePid(item[columns[1]]));
+			returnValue.set(Number.parseInt(match.groups.port, 10), parsePid(item[columns[1]]));
 		}
 	}
 
