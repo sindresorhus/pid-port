@@ -27,7 +27,7 @@ const win32 = async () => {
 
 const getListFunction = process.platform === 'darwin' ? macos : (process.platform === 'linux' ? linux : win32);
 const columns = process.platform === 'darwin' ? [3, 8] : (process.platform === 'linux' ? [4, 6] : [1, 4]);
-const isProtocol = x => /^\s*(tcp|udp)/i.test(x);
+const isProtocol = value => /^\s*(tcp|udp)/i.test(value);
 
 const parsePid = pid => {
 	if (typeof pid !== 'string') {
@@ -44,7 +44,7 @@ const parsePid = pid => {
 
 const getPort = (port, list) => {
 	const regex = new RegExp(`[.:]${port}$`);
-	const foundPort = list.find(x => regex.test(x[columns[0]]));
+	const foundPort = list.find(value => regex.test(value[columns[0]]));
 
 	if (!foundPort) {
 		throw new Error(`Could not find a process that uses port \`${port}\``);
@@ -62,7 +62,7 @@ const getList = async () => {
 module.exports.portToPid = async port => {
 	if (Array.isArray(port)) {
 		const list = await getList();
-		const tuples = await Promise.all(port.map(x => [x, getPort(x, list)]));
+		const tuples = await Promise.all(port.map(value => [value, getPort(value, list)]));
 		return new Map(tuples);
 	}
 
@@ -77,10 +77,10 @@ module.exports.all = async () => {
 	const list = await getList();
 	const returnValue = new Map();
 
-	for (const x of list) {
-		const match = /[^]*[.:](\d+)$/.exec(x[columns[0]]);
+	for (const item of list) {
+		const match = /[^]*[.:](\d+)$/.exec(item[columns[0]]);
 		if (match) {
-			returnValue.set(Number.parseInt(match[1], 10), parsePid(x[columns[1]]));
+			returnValue.set(Number.parseInt(match[1], 10), parsePid(item[columns[1]]));
 		}
 	}
 
