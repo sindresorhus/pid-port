@@ -56,16 +56,7 @@ const getPort = (port, list) => {
 const getList = async () => {
 	const list = await getListFunction();
 
-	return list.split('\n')
-		// TODO: Remove the `.reduce`.
-		// eslint-disable-next-line unicorn/no-reduce
-		.reduce((result, x) => {
-			if (isProtocol(x)) {
-				result.push(x.match(/\S+/g) || []);
-			}
-
-			return result;
-		}, []);
+	return list.split('\n').filter(item => isProtocol(item)).map(item => item.match(/\S+/g) || []);
 };
 
 module.exports.portToPid = async port => {
