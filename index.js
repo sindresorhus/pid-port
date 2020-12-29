@@ -41,8 +41,9 @@ const parsePid = pid => {
 	}
 };
 
-const getPort = (port, list) => {
-	const regex = new RegExp(`[.:]${port}$`);
+const getPort = (port, list, host) => {
+	const regex = host ? new RegExp(`${host}:${port}$`) : new RegExp(`[.:]${port}$`);
+
 	const foundPort = list.find(line => regex.test(line[addressColumn]));
 
 	if (!foundPort) {
@@ -61,18 +62,33 @@ const getList = async () => {
 		.map(line => line.match(/\S+/g) || []);
 };
 
-module.exports.portToPid = async port => {
-	if (Array.isArray(port)) {
+module.exports.portToPid = async (arg1, arg2) => {
+	let host;
+	let port;
+	if (typeof arg1 === 'object' && arg1.port) {
+		port = arg1.port;
+		host = arg1.host;
+	} else if (typeof arg2 === 'string') {
+		port = arg1;
+		host = arg2;
+	} else if (Array.isArray(arg1)) {
+		port = arg1;
 		const list = await getList();
 		const tuples = await Promise.all(port.map(port_ => [port_, getPort(port_, list)]));
 		return new Map(tuples);
+	} else {
+		port = arg1;
+	}
+
+	if (host && typeof host !== 'string') {
+		throw new TypeError(`Expected host to be a string, got ${typeof host}`);
 	}
 
 	if (typeof port !== 'number') {
-		throw new TypeError(`Expected a number, got ${typeof port}`);
+		throw new TypeError(`Expected port to be a number, got ${typeof port}`);
 	}
 
-	return getPort(port, await getList());
+	return getPort(port, await getList(), host);
 };
 
 module.exports.all = async () => {
