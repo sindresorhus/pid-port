@@ -62,22 +62,19 @@ const getList = async () => {
 		.map(line => line.match(/\S+/g) || []);
 };
 
-module.exports.portToPid = async (arg1, arg2) => {
+module.exports.portToPid = async options => {
 	let host;
 	let port;
-	if (typeof arg1 === 'object' && arg1.port) {
-		port = arg1.port;
-		host = arg1.host;
-	} else if (typeof arg2 === 'string') {
-		port = arg1;
-		host = arg2;
-	} else if (Array.isArray(arg1)) {
-		port = arg1;
+	if (typeof options === 'object' && options.port) {
+		port = options.port;
+		host = options.host;
+	} else if (Array.isArray(options)) {
+		const ports = options;
 		const list = await getList();
-		const tuples = await Promise.all(port.map(port_ => [port_, getPort(port_, list)]));
+		const tuples = await Promise.all(ports.map(port_ => [port_, getPort(port_, list)]));
 		return new Map(tuples);
 	} else {
-		port = arg1;
+		port = options;
 	}
 
 	if (host && typeof host !== 'string') {

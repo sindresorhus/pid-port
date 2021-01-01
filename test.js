@@ -10,7 +10,7 @@ const createServer = () => http.createServer((request, response) => {
 test('success', async t => {
 	const port = await getPort();
 	const server = createServer().listen(port);
-	t.truthy(await pidPort.portToPid(port));
+	t.is(await pidPort.portToPid(port), process.pid);
 	server.close();
 });
 
@@ -44,18 +44,10 @@ test('`.list()`', async t => {
 	await t.notThrowsAsync(pidPort.portToPid([...all.keys()]));
 });
 
-test('Node `server.listen()` signature - with different host as arg', async t => {
-	const port = await getPort();
-	const host = '127.0.0.2';
-	const server = createServer().listen(port, host);
-	t.truthy(await pidPort.portToPid(port, host));
-	server.close();
-});
-
-test('Node `server.listen()` signature - with object arg', async t => {
+test('Node `server.listen()` signature - with options object', async t => {
 	const port = await getPort();
 	const host = '127.0.0.2';
 	const server = createServer().listen({port, host});
-	t.truthy(await pidPort.portToPid({port, host}));
+	t.is(await pidPort.portToPid({port, host}), process.pid);
 	server.close();
 });
