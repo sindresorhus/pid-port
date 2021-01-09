@@ -54,6 +54,26 @@ Type: `number[]`
 
 Ports to look up.
 
+### pidPort.pidToPorts(pid)
+
+Returns a `Promise<Set<number>>` with the ports.
+
+#### pid
+
+Type: `number`
+
+Pid to look up.
+
+### pidPort.pidToPorts(pids)
+
+Returns a `Promise<Map<number, Set<number>>>` with the port as key and the process ID as value.
+
+#### pids
+
+Type: `number[]`
+
+Pids to look up.
+
 ### pidPort.all()
 
 Get all process IDs from ports.

@@ -38,6 +38,22 @@ test('`.all()`', async t => {
 	server2.close();
 });
 
+test('`.pidToPorts()`', async t => {
+	const firstPort = await getPort();
+	const firstServer = createServer().listen(firstPort);
+
+	const secondPort = await getPort();
+	const secondServer = createServer().listen(secondPort);
+
+	const portsFixture = new Set([firstPort, secondPort]);
+
+	t.deepEqual(await pidPort.pidToPorts(process.pid), portsFixture);
+	t.deepEqual(await pidPort.pidToPorts([process.pid]), new Map([[process.pid, portsFixture]]));
+
+	firstServer.close();
+	secondServer.close();
+});
+
 test('`.list()`', async t => {
 	const all = await pidPort.all();
 	t.true(all instanceof Map);
