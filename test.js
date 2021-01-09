@@ -10,7 +10,7 @@ const createServer = () => http.createServer((request, response) => {
 test('success', async t => {
 	const port = await getPort();
 	const server = createServer().listen(port);
-	t.truthy(await pidPort.portToPid(port));
+	t.is(await pidPort.portToPid(port), process.pid);
 	server.close();
 });
 
