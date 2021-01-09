@@ -45,10 +45,19 @@ test('`.pidToPorts()`', async t => {
 	const secondPort = await getPort();
 	const secondServer = createServer().listen(secondPort);
 
-	const portsFixture = new Set([firstPort, secondPort]);
+	const portsToCheck = [firstPort, secondPort];
 
-	t.deepEqual(await pidPort.pidToPorts(process.pid), portsFixture);
-	t.deepEqual(await pidPort.pidToPorts([process.pid]), new Map([[process.pid, portsFixture]]));
+	const pidPorts = await pidPort.pidToPorts(process.pid);
+
+	for (const port of portsToCheck) {
+		t.true(pidPorts.has(port));
+	}
+
+	const pidsPorts = (await pidPort.pidToPorts([process.pid])).get(process.pid);
+
+	for (const port of portsToCheck) {
+		t.true(pidsPorts.has(port));
+	}
 
 	firstServer.close();
 	secondServer.close();
