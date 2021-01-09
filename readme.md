@@ -40,7 +40,7 @@ Returns a `Promise<integer>` with the process ID.
 
 #### port
 
-Type: `integer`
+Type: `number` *(integer)*
 
 Port to look up.
 
