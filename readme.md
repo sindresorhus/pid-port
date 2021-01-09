@@ -46,7 +46,7 @@ Port to look up.
 
 ### pidPort.portToPid(ports)
 
-Returns a `Promise<Map<number, number>>` (*integer*) with the port as key and the process ID as value.
+Returns a `Promise<Map<number, number>>` *(integer)* with the port as key and the process ID as value.
 
 #### ports
 
@@ -58,7 +58,7 @@ Ports to look up.
 
 Get all process IDs from ports.
 
-Returns a `Promise<Map<number, number>>` (*integer*) with the port as key and the process ID as value.
+Returns a `Promise<Map<number, number>>` *(integer)* with the port as key and the process ID as value.
 
 ## Related
 
