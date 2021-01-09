@@ -68,8 +68,8 @@ module.exports.portToPid = async port => {
 		return new Map(tuples);
 	}
 
-	if (typeof port !== 'number') {
-		throw new TypeError(`Expected a number, got ${typeof port}`);
+	if (!Number.isInteger(port)) {
+		throw new TypeError(`Expected an integer, got ${typeof port}`);
 	}
 
 	return getPort(port, await getList());

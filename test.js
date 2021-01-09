@@ -19,8 +19,9 @@ test('fail', async t => {
 	await t.throwsAsync(pidPort.portToPid([0]), {message: 'Could not find a process that uses port `0`'});
 });
 
-test('accepts a number', async t => {
-	await t.throwsAsync(pidPort.portToPid('foo'), {message: 'Expected a number, got string'});
+test('accepts an integer', async t => {
+	await t.throwsAsync(pidPort.portToPid('foo'), {message: 'Expected an integer, got string'});
+	await t.throwsAsync(pidPort.portToPid(0.5), {message: 'Expected an integer, got number'});
 });
 
 test('`.all()`', async t => {
