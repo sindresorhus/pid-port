@@ -39,6 +39,31 @@ test('`.all()`', async t => {
 	server2.close();
 });
 
+test('`.pidToPorts()`', async t => {
+	const firstPort = await getPort();
+	const firstServer = createServer().listen(firstPort);
+
+	const secondPort = await getPort();
+	const secondServer = createServer().listen(secondPort);
+
+	const portsToCheck = [firstPort, secondPort];
+
+	const pidPorts = await pidPort.pidToPorts(process.pid);
+
+	for (const port of portsToCheck) {
+		t.true(pidPorts.has(port));
+	}
+
+	const pidsPorts = (await pidPort.pidToPorts([process.pid])).get(process.pid);
+
+	for (const port of portsToCheck) {
+		t.true(pidsPorts.has(port));
+	}
+
+	firstServer.close();
+	secondServer.close();
+});
+
 test('`.list()`', async t => {
 	const all = await pidPort.all();
 	t.true(all instanceof Map);

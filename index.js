@@ -75,6 +75,34 @@ module.exports.portToPid = async port => {
 	return getPort(port, await getList());
 };
 
+module.exports.pidToPorts = async pid => {
+	if (Array.isArray(pid)) {
+		const returnValue = new Map(pid.map(pid_ => [pid_, new Set()]));
+
+		for (const [port, pid_] of await module.exports.all()) {
+			if (returnValue.has(pid_)) {
+				returnValue.get(pid_).add(port);
+			}
+		}
+
+		return returnValue;
+	}
+
+	if (!Number.isInteger(pid)) {
+		throw new TypeError(`Expected an integer, got ${typeof pid}`);
+	}
+
+	const returnValue = new Set();
+
+	for (const [port, pid_] of await module.exports.all()) {
+		if (pid_ === pid) {
+			returnValue.add(port);
+		}
+	}
+
+	return returnValue;
+};
+
 module.exports.all = async () => {
 	const list = await getList();
 	const returnValue = new Map();
