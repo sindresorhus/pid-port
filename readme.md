@@ -62,7 +62,7 @@ Returns a `Promise<Set<number>>` with the ports.
 
 Type: `number`
 
-Pid to look up.
+Process IDs to look up.
 
 ### pidPort.pidToPorts(pids)
 
