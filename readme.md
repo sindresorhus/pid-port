@@ -66,7 +66,7 @@ Process ID to look up.
 
 ### pidPort.pidToPorts(pids)
 
-Returns a `Promise<Map<number, Set<number>>>` with the port as key and the process ID as value.
+Returns a `Promise<Map<number, Set<number>>>` with the process ID as the key and the ports as value.
 
 #### pids
 
