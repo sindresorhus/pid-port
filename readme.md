@@ -36,29 +36,49 @@ const pidPort = require('pid-port');
 
 ### pidPort.portToPid(port)
 
-Returns a `Promise<number>` with the process ID.
+Returns a `Promise<number>` *(integer)* with the process ID.
 
 #### port
 
-Type: `number`
+Type: `number` *(integer)*
 
 Port to look up.
 
 ### pidPort.portToPid(ports)
 
-Returns a `Promise<Map<number, number>>` with the port as key and the process ID as value.
+Returns a `Promise<Map<number, number>>` *(integer)* with the port as key and the process ID as value.
 
 #### ports
 
-Type: `number[]`
+Type: `number[]` *(integer)*
 
 Ports to look up.
+
+### pidPort.pidToPorts(pid)
+
+Returns a `Promise<Set<number>>` with the ports.
+
+#### pid
+
+Type: `number`
+
+Process ID to look up.
+
+### pidPort.pidToPorts(pids)
+
+Returns a `Promise<Map<number, Set<number>>>` with the process ID as the key and the ports as value.
+
+#### pids
+
+Type: `number[]`
+
+Process IDs to look up.
 
 ### pidPort.all()
 
 Get all process IDs from ports.
 
-Returns a `Promise<Map<number, number>>` with the port as key and the process ID as value.
+Returns a `Promise<Map<number, number>>` *(integer)* with the port as key and the process ID as value.
 
 ## Related
 

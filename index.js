@@ -81,11 +81,39 @@ module.exports.portToPid = async options => {
 		throw new TypeError(`Expected host to be a string, got ${typeof host}`);
 	}
 
-	if (typeof port !== 'number') {
-		throw new TypeError(`Expected port to be a number, got ${typeof port}`);
+	if (!Number.isInteger(port)) {
+		throw new TypeError(`Expected an integer, got ${typeof port}`);
 	}
 
 	return getPort(port, await getList(), host);
+};
+
+module.exports.pidToPorts = async pid => {
+	if (Array.isArray(pid)) {
+		const returnValue = new Map(pid.map(pid_ => [pid_, new Set()]));
+
+		for (const [port, pid_] of await module.exports.all()) {
+			if (returnValue.has(pid_)) {
+				returnValue.get(pid_).add(port);
+			}
+		}
+
+		return returnValue;
+	}
+
+	if (!Number.isInteger(pid)) {
+		throw new TypeError(`Expected an integer, got ${typeof pid}`);
+	}
+
+	const returnValue = new Set();
+
+	for (const [port, pid_] of await module.exports.all()) {
+		if (pid_ === pid) {
+			returnValue.add(port);
+		}
+	}
+
+	return returnValue;
 };
 
 module.exports.all = async host => {

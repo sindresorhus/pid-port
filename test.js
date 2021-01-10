@@ -52,8 +52,9 @@ test('fail', async t => {
 	await t.throwsAsync(pidPort.portToPid([0]), {message: 'Could not find a process that uses port `0`'});
 });
 
-test('accepts a number', async t => {
-	await t.throwsAsync(pidPort.portToPid('foo'), {message: 'Expected port to be a number, got string'});
+test('accepts an integer', async t => {
+	await t.throwsAsync(pidPort.portToPid('foo'), {message: 'Expected an integer, got string'});
+	await t.throwsAsync(pidPort.portToPid(0.5), {message: 'Expected an integer, got number'});
 });
 
 test('accepts a list input', async t => {
@@ -69,6 +70,31 @@ test('accepts a list input', async t => {
 
 	server1.close();
 	server2.close();
+});
+
+test('`.pidToPorts()`', async t => {
+	const firstPort = await getPort();
+	const firstServer = createServer().listen(firstPort);
+
+	const secondPort = await getPort();
+	const secondServer = createServer().listen(secondPort);
+
+	const portsToCheck = [firstPort, secondPort];
+
+	const pidPorts = await pidPort.pidToPorts(process.pid);
+
+	for (const port of portsToCheck) {
+		t.true(pidPorts.has(port));
+	}
+
+	const pidsPorts = (await pidPort.pidToPorts([process.pid])).get(process.pid);
+
+	for (const port of portsToCheck) {
+		t.true(pidsPorts.has(port));
+	}
+
+	firstServer.close();
+	secondServer.close();
 });
 
 test('`.all()`', async t => {
