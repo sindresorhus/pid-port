@@ -88,14 +88,16 @@ module.exports.portToPid = async options => {
 	return getPort(port, await getList(), host);
 };
 
-module.exports.all = async () => {
+module.exports.all = async host => {
 	const list = await getList();
 	const returnValue = new Map();
 
 	for (const line of list) {
-		const {groups} = /[^]*[.:](?<port>\d+)$/.exec(line[addressColumn]);
+		const {groups} = /^(?<host>.*)[.:](?<port>\d+)$/.exec(line[addressColumn]);
 		if (groups) {
-			returnValue.set(Number.parseInt(groups.port, 10), parsePid(line[portColumn]));
+			if (!host || groups.host === host) {
+				returnValue.set(Number.parseInt(groups.port, 10), parsePid(line[portColumn]));
+			}
 		}
 	}
 
