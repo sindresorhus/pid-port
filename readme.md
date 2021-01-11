@@ -83,3 +83,4 @@ Returns a `Promise<Map<number, number>>` *(integer)* with the port as key and th
 ## Related
 
 - [fkill-cli](https://github.com/sindresorhus/fkill-cli) - Uses this package to let you kill the process that occupies a certain port
+- [pid-cwd](https://github.com/neeksandhu/pid-cwd) - Cross-platform library to find the working directory of a process from its pid
