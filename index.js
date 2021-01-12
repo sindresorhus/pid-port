@@ -41,8 +41,9 @@ const parsePid = pid => {
 	}
 };
 
-const getPort = (port, list) => {
-	const regex = new RegExp(`[.:]${port}$`);
+const getPort = (port, list, host) => {
+	const regex = host ? new RegExp(`${host}:${port}$`) : new RegExp(`[.:]${port}$`);
+
 	const foundPort = list.find(line => regex.test(line[addressColumn]));
 
 	if (!foundPort) {
@@ -61,18 +62,30 @@ const getList = async () => {
 		.map(line => line.match(/\S+/g) || []);
 };
 
-module.exports.portToPid = async port => {
-	if (Array.isArray(port)) {
+module.exports.portToPid = async options => {
+	let host;
+	let port;
+	if (typeof options === 'object' && options.port) {
+		port = options.port;
+		host = options.host;
+	} else if (Array.isArray(options)) {
+		const ports = options;
 		const list = await getList();
-		const tuples = await Promise.all(port.map(port_ => [port_, getPort(port_, list)]));
+		const tuples = await Promise.all(ports.map(port_ => [port_, getPort(port_, list)]));
 		return new Map(tuples);
+	} else {
+		port = options;
+	}
+
+	if (host && typeof host !== 'string') {
+		throw new TypeError(`Expected host to be a string, got ${typeof host}`);
 	}
 
 	if (!Number.isInteger(port)) {
 		throw new TypeError(`Expected an integer, got ${typeof port}`);
 	}
 
-	return getPort(port, await getList());
+	return getPort(port, await getList(), host);
 };
 
 module.exports.pidToPorts = async pid => {
@@ -103,14 +116,16 @@ module.exports.pidToPorts = async pid => {
 	return returnValue;
 };
 
-module.exports.all = async () => {
+module.exports.all = async host => {
 	const list = await getList();
 	const returnValue = new Map();
 
 	for (const line of list) {
-		const {groups} = /[^]*[.:](?<port>\d+)$/.exec(line[addressColumn]);
+		const {groups} = /^(?<host>.*)[.:](?<port>\d+)$/.exec(line[addressColumn]);
 		if (groups) {
-			returnValue.set(Number.parseInt(groups.port, 10), parsePid(line[portColumn]));
+			if (!host || groups.host === host) {
+				returnValue.set(Number.parseInt(groups.port, 10), parsePid(line[portColumn]));
+			}
 		}
 	}
 
