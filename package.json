@@ -4,11 +4,11 @@
 	"description": "Get the ID of the process that uses a certain port",
 	"license": "MIT",
 	"repository": "sindresorhus/pid-port",
-	"funding": {
-		"url": "https://github.com/sponsors/sindresorhus"
-	},
+	"funding": "https://github.com/sponsors/sindresorhus",
+	"type": "module",
+	"exports": "./index.js",
 	"engines": {
-		"node": ">=10"
+		"node": "^12.20.0 || ^14.13.1 || >=16.0.0"
 	},
 	"scripts": {
 		"test": "xo && ava"
@@ -28,11 +28,14 @@
 		"converter"
 	],
 	"dependencies": {
-		"execa": "^5.0.0"
+		"execa": "^5.1.1"
 	},
 	"devDependencies": {
-		"ava": "^2.4.0",
-		"get-port": "^5.1.1",
-		"xo": "^0.36.1"
+		"ava": "^3.15.0",
+		"get-port": "^6.0.0",
+		"xo": "^0.45.0"
+	},
+	"ava": {
+		"serial": true
 	}
 }

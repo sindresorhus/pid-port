@@ -1,33 +1,34 @@
-import http from 'http';
-import {serial as test} from 'ava';
+import process from 'node:process';
+import http from 'node:http';
+import test from 'ava';
 import getPort from 'get-port';
-import pidPort from '.';
+import {portToPid, pidToPorts, allPortsWithPid} from './index.js';
 
 const createServer = () => http.createServer((request, response) => {
 	response.end();
 });
 
-test('success', async t => {
+test('portToPid()', async t => {
 	const port = await getPort();
 	const server = createServer().listen(port);
-	t.is(await pidPort.portToPid(port), process.pid);
+	t.is(await portToPid(port), process.pid);
 	server.close();
 });
 
 test('fail', async t => {
-	await t.throwsAsync(pidPort.portToPid(0), {message: 'Could not find a process that uses port `0`'});
-	await t.throwsAsync(pidPort.portToPid([0]), {message: 'Could not find a process that uses port `0`'});
+	await t.throwsAsync(portToPid(0), {message: 'Could not find a process that uses port `0`'});
+	await t.throwsAsync(portToPid([0]), {message: 'Could not find a process that uses port `0`'});
 });
 
 test('accepts an integer', async t => {
-	await t.throwsAsync(pidPort.portToPid('foo'), {message: 'Expected an integer, got string'});
-	await t.throwsAsync(pidPort.portToPid(0.5), {message: 'Expected an integer, got number'});
+	await t.throwsAsync(portToPid('foo'), {message: 'Expected an integer, got string'});
+	await t.throwsAsync(portToPid(0.5), {message: 'Expected an integer, got number'});
 });
 
-test('`.all()`', async t => {
+test('multiple', async t => {
 	const [port1, port2] = await Promise.all([getPort(), getPort()]);
 	const [server1, server2] = [createServer().listen(port1), createServer().listen(port2)];
-	const ports = await pidPort.portToPid([port1, port2]);
+	const ports = await portToPid([port1, port2]);
 
 	t.true(ports instanceof Map);
 
@@ -39,7 +40,7 @@ test('`.all()`', async t => {
 	server2.close();
 });
 
-test('`.pidToPorts()`', async t => {
+test('pidToPorts()', async t => {
 	const firstPort = await getPort();
 	const firstServer = createServer().listen(firstPort);
 
@@ -48,13 +49,13 @@ test('`.pidToPorts()`', async t => {
 
 	const portsToCheck = [firstPort, secondPort];
 
-	const pidPorts = await pidPort.pidToPorts(process.pid);
+	const pidPorts = await pidToPorts(process.pid);
 
 	for (const port of portsToCheck) {
 		t.true(pidPorts.has(port));
 	}
 
-	const pidsPorts = (await pidPort.pidToPorts([process.pid])).get(process.pid);
+	const pidsPorts = (await pidToPorts([process.pid])).get(process.pid);
 
 	for (const port of portsToCheck) {
 		t.true(pidsPorts.has(port));
@@ -64,8 +65,8 @@ test('`.pidToPorts()`', async t => {
 	secondServer.close();
 });
 
-test('`.list()`', async t => {
-	const all = await pidPort.all();
+test('allPortsWithPid()', async t => {
+	const all = await allPortsWithPid();
 	t.true(all instanceof Map);
-	await t.notThrowsAsync(pidPort.portToPid([...all.keys()]));
+	await t.notThrowsAsync(portToPid([...all.keys()]));
 });

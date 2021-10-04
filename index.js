@@ -1,5 +1,5 @@
-'use strict';
-const execa = require('execa');
+import process from 'node:process';
+import execa from 'execa';
 
 const netstat = async type => {
 	const {stdout} = await execa('netstat', ['-anv', '-p', type]);
@@ -9,7 +9,7 @@ const netstat = async type => {
 const macos = async () => {
 	const result = await Promise.all([
 		netstat('tcp'),
-		netstat('udp')
+		netstat('udp'),
 	]);
 
 	return result.join('\n');
@@ -35,7 +35,7 @@ const parsePid = pid => {
 		return;
 	}
 
-	const {groups} = /(?:^|",|",pid=)(?<pid>\d+)/.exec(pid);
+	const {groups} = /(?:^|",|",pid=)(?<pid>\d+)/.exec(pid) || {};
 	if (groups) {
 		return Number.parseInt(groups.pid, 10);
 	}
@@ -61,7 +61,7 @@ const getList = async () => {
 		.map(line => line.match(/\S+/g) || []);
 };
 
-module.exports.portToPid = async port => {
+export async function portToPid(port) {
 	if (Array.isArray(port)) {
 		const list = await getList();
 		const tuples = await Promise.all(port.map(port_ => [port_, getPort(port_, list)]));
@@ -73,13 +73,13 @@ module.exports.portToPid = async port => {
 	}
 
 	return getPort(port, await getList());
-};
+}
 
-module.exports.pidToPorts = async pid => {
+export async function pidToPorts(pid) {
 	if (Array.isArray(pid)) {
 		const returnValue = new Map(pid.map(pid_ => [pid_, new Set()]));
 
-		for (const [port, pid_] of await module.exports.all()) {
+		for (const [port, pid_] of await allPortsWithPid()) {
 			if (returnValue.has(pid_)) {
 				returnValue.get(pid_).add(port);
 			}
@@ -94,25 +94,25 @@ module.exports.pidToPorts = async pid => {
 
 	const returnValue = new Set();
 
-	for (const [port, pid_] of await module.exports.all()) {
+	for (const [port, pid_] of await allPortsWithPid()) {
 		if (pid_ === pid) {
 			returnValue.add(port);
 		}
 	}
 
 	return returnValue;
-};
+}
 
-module.exports.all = async () => {
+export async function allPortsWithPid() {
 	const list = await getList();
 	const returnValue = new Map();
 
 	for (const line of list) {
-		const {groups} = /[^]*[.:](?<port>\d+)$/.exec(line[addressColumn]);
+		const {groups} = /[^]*[.:](?<port>\d+)$/.exec(line[addressColumn]) || {};
 		if (groups) {
 			returnValue.set(Number.parseInt(groups.port, 10), parsePid(line[portColumn]));
 		}
 	}
 
 	return returnValue;
-};
+}
