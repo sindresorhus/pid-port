@@ -34,7 +34,9 @@ try {
 
 ### portToPid(port)
 
-Returns a `Promise<number>` *(integer)* with the process ID.
+Get the process ID for a port.
+
+Returns a `Promise<number | undefined>` *(integer)* with the process ID.
 
 #### port
 
@@ -43,6 +45,8 @@ Type: `number` *(integer)*
 The port to look up.
 
 ### portToPid(ports)
+
+Get the process IDs for multiple ports.
 
 Returns a `Promise<Map<number, number>>` *(integer)* with the port as key and the process ID as value.
 
@@ -54,6 +58,8 @@ The ports to look up.
 
 ### pidToPorts(pid)
 
+Get the ports for a process ID.
+
 Returns a `Promise<Set<number>>` with the ports.
 
 #### pid
@@ -63,6 +69,8 @@ Type: `number`
 The process ID to look up.
 
 ### pidToPorts(pids)
+
+Get the ports for multiple process IDs.
 
 Returns a `Promise<Map<number, Set<number>>>` with the process ID as the key and the ports as value.
 

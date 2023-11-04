@@ -1,5 +1,5 @@
 import process from 'node:process';
-import execa from 'execa';
+import {execa} from 'execa';
 
 const netstat = async type => {
 	const {stdout} = await execa('netstat', ['-anv', '-p', type]);
