@@ -6,9 +6,12 @@
 	"repository": "sindresorhus/pid-port",
 	"funding": "https://github.com/sponsors/sindresorhus",
 	"type": "module",
-	"exports": "./index.js",
+	"exports": {
+		"types": "./index.d.ts",
+		"default": "./index.js"
+	},
 	"engines": {
-		"node": "^12.20.0 || ^14.13.1 || >=16.0.0"
+		"node": ">=18"
 	},
 	"scripts": {
 		"test": "xo && ava"
@@ -28,12 +31,12 @@
 		"converter"
 	],
 	"dependencies": {
-		"execa": "^5.1.1"
+		"execa": "^8.0.1"
 	},
 	"devDependencies": {
-		"ava": "^3.15.0",
-		"get-port": "^6.0.0",
-		"xo": "^0.45.0"
+		"ava": "^5.3.1",
+		"get-port": "^7.0.0",
+		"xo": "^0.56.0"
 	},
 	"ava": {
 		"serial": true

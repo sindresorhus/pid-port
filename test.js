@@ -55,7 +55,8 @@ test('pidToPorts()', async t => {
 		t.true(pidPorts.has(port));
 	}
 
-	const pidsPorts = (await pidToPorts([process.pid])).get(process.pid);
+	const ports = await pidToPorts([process.pid]);
+	const pidsPorts = ports.get(process.pid);
 
 	for (const port of portsToCheck) {
 		t.true(pidsPorts.has(port));

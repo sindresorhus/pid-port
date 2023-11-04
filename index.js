@@ -20,12 +20,12 @@ const linux = async () => {
 	return stdout;
 };
 
-const win32 = async () => {
+const windows = async () => {
 	const {stdout} = await execa('netstat', ['-ano']);
 	return stdout;
 };
 
-const getListFunction = process.platform === 'darwin' ? macos : (process.platform === 'linux' ? linux : win32);
+const getListFunction = process.platform === 'darwin' ? macos : (process.platform === 'linux' ? linux : windows);
 const addressColumn = process.platform === 'darwin' ? 3 : (process.platform === 'linux' ? 4 : 1);
 const portColumn = process.platform === 'darwin' ? 8 : (process.platform === 'linux' ? 6 : 4);
 const isProtocol = value => /^\s*(tcp|udp)/i.test(value);
