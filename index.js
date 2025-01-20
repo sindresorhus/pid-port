@@ -24,7 +24,7 @@ const macos = async () => {
 		// txbytes before pid. Unfortunately headers can't be parsed because
 		// they're space separated but some contain spaces, so we use this
 		// heuristic to distinguish the two netstat versions.
-		pidColumn: header.indexOf('rxbytes') ? 10 : 8,
+		pidColumn: header.includes('rxbytes') ? 10 : 8,
 	};
 };
 
