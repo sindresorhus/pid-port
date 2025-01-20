@@ -10,6 +10,7 @@
 		"types": "./index.d.ts",
 		"default": "./index.js"
 	},
+	"sideEffects": false,
 	"engines": {
 		"node": ">=18"
 	},
