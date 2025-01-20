@@ -12,22 +12,40 @@ const macos = async () => {
 		netstat('udp'),
 	]);
 
-	return result.join('\n');
+	const tcp = result[0];
+	// Column headers are on the second line
+	const headerStart = tcp.indexOf('\n') + 1;
+	const header = tcp.slice(headerStart, tcp.indexOf('\n', headerStart));
+
+	return {
+		stdout: result.join('\n'),
+		addressColumn: 3,
+		// Some versions of macOS print two extra columns for rxbytes and
+		// txbytes before pid. Unfortunately headers can't be parsed because
+		// they're space separated but some contain spaces, so we use this
+		// heuristic to distinguish the two netstat versions.
+		pidColumn: header.indexOf('rxbytes') ? 10 : 8,
+	};
 };
 
 const linux = async () => {
 	const {stdout} = await execa('ss', ['-tunlp']);
-	return stdout;
+	return {
+		stdout,
+		addressColumn: 4,
+		pidColumn: 6,
+	};
 };
 
 const windows = async () => {
 	const {stdout} = await execa('netstat', ['-ano']);
-	return stdout;
+	return {
+		stdout,
+		addressColumn: 1,
+		pidColumn: 4,
+	};
 };
 
-const getListFunction = process.platform === 'darwin' ? macos : (process.platform === 'linux' ? linux : windows);
-const addressColumn = process.platform === 'darwin' ? 3 : (process.platform === 'linux' ? 4 : 1);
-const portColumn = process.platform === 'darwin' ? 8 : (process.platform === 'linux' ? 6 : 4);
 const isProtocol = value => /^\s*(tcp|udp)/i.test(value);
 
 const parsePid = pid => {
@@ -41,24 +59,26 @@ const parsePid = pid => {
 	}
 };
 
-const getPort = (port, list) => {
+const getPort = (port, {lines, addressColumn, pidColumn}) => {
 	const regex = new RegExp(`[.:]${port}$`);
-	const foundPort = list.find(line => regex.test(line[addressColumn]));
+	const foundPort = lines.find(line => regex.test(line[addressColumn]));
 
 	if (!foundPort) {
 		throw new Error(`Could not find a process that uses port \`${port}\``);
 	}
 
-	return parsePid(foundPort[portColumn]);
+	return parsePid(foundPort[pidColumn]);
 };
 
+const implementation = process.platform === 'darwin' ? macos : (process.platform === 'linux' ? linux : windows);
 const getList = async () => {
-	const list = await getListFunction();
+	const {stdout, addressColumn, pidColumn} = await implementation();
 
-	return list
+	const lines = stdout
 		.split('\n')
 		.filter(line => isProtocol(line))
 		.map(line => line.match(/\S+/g) || []);
+	return {lines, addressColumn, pidColumn};
 };
 
 export async function portToPid(port) {
@@ -104,13 +124,13 @@ export async function pidToPorts(pid) {
 }
 
 export async function allPortsWithPid() {
-	const list = await getList();
+	const {lines, addressColumn, pidColumn} = await getList();
 	const returnValue = new Map();
 
-	for (const line of list) {
+	for (const line of lines) {
 		const {groups} = /[^]*[.:](?<port>\d+)$/.exec(line[addressColumn]) || {};
 		if (groups) {
-			returnValue.set(Number.parseInt(groups.port, 10), parsePid(line[portColumn]));
+			returnValue.set(Number.parseInt(groups.port, 10), parsePid(line[pidColumn]));
 		}
 	}
 
