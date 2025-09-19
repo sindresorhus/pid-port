@@ -53,7 +53,7 @@ const parsePid = pid => {
 		return;
 	}
 
-	const {groups} = /(?:^|",|",pid=)(?<pid>\d+)/.exec(pid) || {};
+	const {groups} = /(?:^|",|",pid=|[A-z]+:)(?<pid>\d+)/.exec(pid) || {};
 	if (groups) {
 		return Number.parseInt(groups.pid, 10);
 	}
