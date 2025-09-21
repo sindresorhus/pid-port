@@ -70,7 +70,6 @@ Get the process IDs for multiple ports.
 
 Returns a `Promise<Map<number, number>>` *(integer)* with the port as key and the process ID as value.
 
-@example
 ```js
 import {portToPid} from 'pid-port';
 
@@ -100,7 +99,6 @@ Get the ports for a process ID.
 
 Returns a `Promise<Set<number>>` with the ports.
 
-@example
 ```js
 import {pidToPorts} from 'pid-port';
 
@@ -124,7 +122,6 @@ Get the ports for multiple process IDs.
 
 Returns a `Promise<Map<number, Set<number>>>` with the process ID as the key and the ports as value.
 
-@example
 ```js
 import {pidToPorts} from 'pid-port';
 
@@ -151,7 +148,6 @@ Returns a `Promise<Map<number, number>>` *(integer)* with the port as key and th
 > [!NOTE]
 > By default, only checks localhost (`127.0.0.1` and `::1`). Use `{host: '*'}` to check all interfaces if needed.
 
-@example
 ```js
 import {allPortsWithPid} from 'pid-port';
 
@@ -191,7 +187,6 @@ Returns a `Promise<Array<{host: string; pid: number}>>` with detailed binding in
 > [!NOTE]
 > By default, only checks localhost (`127.0.0.1` and `::1`). Use `{host: '*'}` to check all interfaces if needed.
 
-@example
 ```js
 import {portBindings} from 'pid-port';
 
