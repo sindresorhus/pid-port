@@ -12,10 +12,10 @@
 	},
 	"sideEffects": false,
 	"engines": {
-		"node": ">=18"
+		"node": ">=20"
 	},
 	"scripts": {
-		"test": "xo && ava && tsc index.d.ts"
+		"test": "xo && node --test test.js && tsc"
 	},
 	"files": [
 		"index.js",
@@ -33,15 +33,11 @@
 		"converter"
 	],
 	"dependencies": {
-		"execa": "^8.0.1"
+		"execa": "^9.6.0"
 	},
 	"devDependencies": {
-		"ava": "^5.3.1",
-		"get-port": "^7.0.0",
-		"typescript": "^5.2.2",
-		"xo": "^0.56.0"
-	},
-	"ava": {
-		"serial": true
+		"get-port": "^7.1.0",
+		"typescript": "^5.9.2",
+		"xo": "^1.2.2"
 	}
 }
