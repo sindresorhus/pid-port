@@ -2,6 +2,11 @@ import process from 'node:process';
 import http from 'node:http';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {execFile} from 'node:child_process';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {promisify} from 'node:util';
 import getPort from 'get-port';
 import {
 	portToPid,
@@ -9,6 +14,8 @@ import {
 	allPortsWithPid,
 	portBindings,
 } from './index.js';
+
+const execFileAsync = promisify(execFile);
 
 const createServer = () => http.createServer((request, response) => {
 	response.end();
@@ -256,6 +263,59 @@ test('portToPid unified API', async () => {
 	assert.equal(pidWithHost, process.pid);
 
 	server.close();
+});
+
+test('Linux: process names with spaces do not break PID extraction', async t => {
+	if (process.platform !== 'linux') {
+		t.skip();
+		return;
+	}
+
+	const originalTitle = process.title;
+	const originalPath = process.env.PATH;
+	const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'pid-port-'));
+
+	let server;
+
+	try {
+		process.title = 'next-server (v16.1.1)';
+
+		const port = await getPort();
+		server = await startServer(port);
+
+		// Ensure we actually hit the problematic ss tokenization case on this system
+		const {stdout} = await execFileAsync('ss', ['-tunlp']);
+		const matchingLine = stdout
+			.split('\n')
+			.find(line => line.includes(`:${port}`) && line.includes(`pid=${process.pid}`));
+
+		if (!matchingLine) {
+			t.skip('ss output does not include PID info');
+			return;
+		}
+
+		const columns = matchingLine.match(/\S+/g) ?? [];
+		const pidColumn = 6;
+		const pidIndex = columns.findIndex((column, index) => index >= pidColumn && column.includes(`pid=${process.pid}`));
+
+		if (pidIndex <= pidColumn) {
+			t.skip('ss output does not shift the PID column');
+			return;
+		}
+
+		// Shadow lsof so the fix must work without the lsof fallback
+		const shadowedLsof = path.join(temporaryDirectory, 'lsof');
+		await fs.writeFile(shadowedLsof, '#!/bin/sh\nexit 1\n');
+		await fs.chmod(shadowedLsof, 0o755);
+		process.env.PATH = `${temporaryDirectory}:${originalPath}`;
+
+		assert.equal(await portToPid(port), process.pid);
+	} finally {
+		process.title = originalTitle;
+		process.env.PATH = originalPath;
+		server?.close();
+		await fs.rm(temporaryDirectory, {recursive: true, force: true});
+	}
 });
 
 test('error messages', async () => {
