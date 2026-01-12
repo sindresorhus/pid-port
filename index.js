@@ -100,14 +100,12 @@ const parsePid = pid => {
 // When process names contain spaces (e.g., "next-server (v16.1.1)"), the ss output
 // gets split into multiple columns, so we need to search across all columns from pidColumn
 const findPidInLine = (line, pidColumn) => {
-	for (let i = pidColumn; i < line.length; i++) {
-		const pid = parsePid(line[i]);
+	for (const column of line.slice(pidColumn)) {
+		const pid = parsePid(column);
 		if (pid !== undefined) {
 			return pid;
 		}
 	}
-
-	return undefined;
 };
 
 const parseAddress = address => {
