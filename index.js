@@ -96,6 +96,20 @@ const parsePid = pid => {
 	}
 };
 
+// Search for PID starting from pidColumn, handling process names with spaces
+// When process names contain spaces (e.g., "next-server (v16.1.1)"), the ss output
+// gets split into multiple columns, so we need to search across all columns from pidColumn
+const findPidInLine = (line, pidColumn) => {
+	for (let i = pidColumn; i < line.length; i++) {
+		const pid = parsePid(line[i]);
+		if (pid !== undefined) {
+			return pid;
+		}
+	}
+
+	return undefined;
+};
+
 const parseAddress = address => {
 	// Match "...:123" or "... .123" with the port at the end; keep host greedy to the last separator
 	const match = /^(?<host>.+?)[.:](?<port>\d+)$/.exec(address);
@@ -204,7 +218,7 @@ const getPort = async (port, {lines, addressColumn, pidColumn}, host) => {
 	// Sort with localhost priority
 	sortByHostPriority(matchingPorts, line => line[addressColumn]);
 
-	const pid = parsePid(matchingPorts[0][pidColumn]);
+	const pid = findPidInLine(matchingPorts[0], pidColumn);
 	if (pid !== undefined) {
 		return pid;
 	}
@@ -300,7 +314,7 @@ export async function allPortsWithPid(options) {
 
 	for (const line of filteredLines) {
 		const {port} = parseAddress(line[addressColumn]);
-		const pid = parsePid(line[pidColumn]);
+		const pid = findPidInLine(line, pidColumn);
 
 		if (port !== undefined && pid !== undefined) {
 			resultMap.set(port, pid);
@@ -327,7 +341,7 @@ export async function portBindings(port, options) {
 	const bindings = [];
 	for (const line of matchingPorts) {
 		const {host} = parseAddress(line[addressColumn]);
-		const pid = parsePid(line[pidColumn]);
+		const pid = findPidInLine(line, pidColumn);
 
 		if (pid === undefined) {
 			continue;
