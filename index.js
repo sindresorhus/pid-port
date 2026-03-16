@@ -243,7 +243,29 @@ const platformImplementations = {darwin: macos, linux};
 const implementation = platformImplementations[process.platform] ?? windows;
 
 const getList = async () => {
-	const {stdout, addressColumn, pidColumn} = await implementation();
+	let result;
+	try {
+		result = await implementation();
+	} catch (error) {
+		// Primary tool (ss on Linux, netstat on macOS) not available — fall back to lsof
+		if (process.platform === 'linux' || process.platform === 'darwin') {
+			try {
+				const stdout = await lsofFallback();
+				// lsof columns: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+				const lines = stdout
+					.split('\n')
+					.filter(line => isProtocol(line))
+					.map(line => line.match(/\S+/g) || []);
+				return {lines, addressColumn: 7, pidColumn: 1};
+			} catch {
+				// Both primary and lsof failed — rethrow original error
+			}
+		}
+
+		throw error;
+	}
+
+	const {stdout, addressColumn, pidColumn} = result;
 
 	const lines = stdout
 		.split('\n')
