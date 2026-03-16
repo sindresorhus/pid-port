@@ -265,6 +265,132 @@ test('portToPid unified API', async () => {
 	server.close();
 });
 
+test('lsof fallback keeps connected local sockets', async t => {
+	if (process.platform === 'win32') {
+		t.skip();
+		return;
+	}
+
+	const originalPath = process.env.PATH;
+	const primaryCommand = process.platform === 'linux' ? 'ss' : 'netstat';
+
+	await fs.mkdir('.ai-temporary', {recursive: true});
+	const temporaryDirectory = await fs.mkdtemp(path.join('.ai-temporary', 'pid-port-'));
+
+	try {
+		await fs.writeFile(path.join(temporaryDirectory, primaryCommand), '#!/bin/sh\nexit 1\n');
+		await fs.chmod(path.join(temporaryDirectory, primaryCommand), 0o755);
+		await fs.writeFile(path.join(temporaryDirectory, 'lsof'), `#!/bin/sh
+cat <<'EOF'
+COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+node 12345 user 20u IPv4 0x123 0t0 TCP 127.0.0.1:49152->127.0.0.1:5432 (ESTABLISHED)
+EOF
+`);
+		await fs.chmod(path.join(temporaryDirectory, 'lsof'), 0o755);
+		process.env.PATH = `${temporaryDirectory}:${originalPath}`;
+
+		assert.equal(await portToPid(49_152), 12_345);
+		assert.deepEqual(await allPortsWithPid(), new Map([[49_152, 12_345]]));
+		assert.deepEqual(await pidToPorts(12_345), new Set([49_152]));
+	} finally {
+		process.env.PATH = originalPath;
+		await fs.rm(temporaryDirectory, {recursive: true, force: true});
+	}
+});
+
+test('lsof fallback does not treat remote ports as local bindings', async t => {
+	if (process.platform === 'win32') {
+		t.skip();
+		return;
+	}
+
+	const originalPath = process.env.PATH;
+	const primaryCommand = process.platform === 'linux' ? 'ss' : 'netstat';
+
+	await fs.mkdir('.ai-temporary', {recursive: true});
+	const temporaryDirectory = await fs.mkdtemp(path.join('.ai-temporary', 'pid-port-'));
+
+	try {
+		await fs.writeFile(path.join(temporaryDirectory, primaryCommand), '#!/bin/sh\nexit 1\n');
+		await fs.chmod(path.join(temporaryDirectory, primaryCommand), 0o755);
+		await fs.writeFile(path.join(temporaryDirectory, 'lsof'), `#!/bin/sh
+cat <<'EOF'
+COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+node 12345 user 20u IPv4 0x123 0t0 TCP 127.0.0.1:49152->127.0.0.1:5432 (ESTABLISHED)
+EOF
+`);
+		await fs.chmod(path.join(temporaryDirectory, 'lsof'), 0o755);
+		process.env.PATH = `${temporaryDirectory}:${originalPath}`;
+
+		await assert.rejects(portToPid(5432), {message: 'Could not find a process that uses port `5432` on localhost'});
+		await assert.rejects(portBindings(5432), {message: 'Could not find any processes using port `5432` on localhost'});
+	} finally {
+		process.env.PATH = originalPath;
+		await fs.rm(temporaryDirectory, {recursive: true, force: true});
+	}
+});
+
+test('empty lsof fallback behaves like an empty connection list', async t => {
+	if (process.platform === 'win32') {
+		t.skip();
+		return;
+	}
+
+	const originalPath = process.env.PATH;
+	const primaryCommand = process.platform === 'linux' ? 'ss' : 'netstat';
+
+	await fs.mkdir('.ai-temporary', {recursive: true});
+	const temporaryDirectory = await fs.mkdtemp(path.join('.ai-temporary', 'pid-port-'));
+
+	try {
+		await fs.writeFile(path.join(temporaryDirectory, primaryCommand), '#!/bin/sh\nexit 1\n');
+		await fs.chmod(path.join(temporaryDirectory, primaryCommand), 0o755);
+		await fs.writeFile(path.join(temporaryDirectory, 'lsof'), '#!/bin/sh\nexit 1\n');
+		await fs.chmod(path.join(temporaryDirectory, 'lsof'), 0o755);
+		process.env.PATH = `${temporaryDirectory}:${originalPath}`;
+
+		await assert.rejects(portToPid(12_345), {message: 'Could not find a process that uses port `12345` on localhost'});
+		assert.deepEqual(await allPortsWithPid(), new Map());
+		assert.deepEqual(await pidToPorts(12_345), new Set());
+		await assert.rejects(portBindings(12_345), {message: 'Could not find any processes using port `12345` on localhost'});
+	} finally {
+		process.env.PATH = originalPath;
+		await fs.rm(temporaryDirectory, {recursive: true, force: true});
+	}
+});
+
+test('lsof fallback resolves LISTEN sockets without arrow notation', async t => {
+	if (process.platform === 'win32') {
+		t.skip();
+		return;
+	}
+
+	const originalPath = process.env.PATH;
+	const primaryCommand = process.platform === 'linux' ? 'ss' : 'netstat';
+
+	await fs.mkdir('.ai-temporary', {recursive: true});
+	const temporaryDirectory = await fs.mkdtemp(path.join('.ai-temporary', 'pid-port-'));
+
+	try {
+		await fs.writeFile(path.join(temporaryDirectory, primaryCommand), '#!/bin/sh\nexit 1\n');
+		await fs.chmod(path.join(temporaryDirectory, primaryCommand), 0o755);
+		await fs.writeFile(path.join(temporaryDirectory, 'lsof'), `#!/bin/sh
+cat <<'EOF'
+COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+node 99999 user 20u IPv4 0x123 0t0 TCP 127.0.0.1:8080 (LISTEN)
+EOF
+`);
+		await fs.chmod(path.join(temporaryDirectory, 'lsof'), 0o755);
+		process.env.PATH = `${temporaryDirectory}:${originalPath}`;
+
+		assert.equal(await portToPid(8080), 99_999);
+		assert.deepEqual(await allPortsWithPid(), new Map([[8080, 99_999]]));
+	} finally {
+		process.env.PATH = originalPath;
+		await fs.rm(temporaryDirectory, {recursive: true, force: true});
+	}
+});
+
 test('Linux: process names with spaces do not break PID extraction', async t => {
 	if (process.platform !== 'linux') {
 		t.skip();

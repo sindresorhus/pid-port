@@ -39,6 +39,26 @@ const lsofFallback = async port => {
 	return stdout;
 };
 
+const lsofGetList = async () => {
+	let stdout;
+	try {
+		({stdout} = await execa('lsof', ['-nP', '-iTCP', '-iUDP']));
+	} catch (error) {
+		if (error.exitCode !== 1 || error.stdout !== '') {
+			throw error;
+		}
+
+		stdout = '';
+	}
+
+	const lines = stdout
+		.split('\n')
+		.slice(1) // Skip header
+		.map(line => line.match(/\S+/g) || [])
+		.filter(columns => columns.length > 8 && /^(tcp|udp)$/i.test(columns[7]));
+	return {lines, addressColumn: 8, pidColumn: 1};
+};
+
 const linux = async () => {
 	const {stdout} = await execa('ss', ['-tunlp']);
 	return {stdout, addressColumn: 4, pidColumn: 6};
@@ -109,6 +129,8 @@ const findPidInLine = (line, pidColumn) => {
 };
 
 const parseAddress = address => {
+	address = address.split('->')[0];
+
 	// Match "...:123" or "... .123" with the port at the end; keep host greedy to the last separator
 	const match = /^(?<host>.+?)[.:](?<port>\d+)$/.exec(address);
 	const rawHost = match?.groups?.host ?? address;
@@ -199,8 +221,7 @@ const validatePid = pid => {
 };
 
 const filterPortLines = (port, {lines, addressColumn}, hostFilter) => {
-	const regex = new RegExp(`[.:]${port}$`);
-	const matchingPorts = lines.filter(line => regex.test(line[addressColumn]));
+	const matchingPorts = lines.filter(line => parseAddress(line[addressColumn]).port === port);
 	return applyHostFilter(matchingPorts, addressColumn, hostFilter);
 };
 
@@ -243,13 +264,20 @@ const platformImplementations = {darwin: macos, linux};
 const implementation = platformImplementations[process.platform] ?? windows;
 
 const getList = async () => {
-	const {stdout, addressColumn, pidColumn} = await implementation();
+	try {
+		const {stdout, addressColumn, pidColumn} = await implementation();
+		const lines = stdout
+			.split('\n')
+			.filter(line => isProtocol(line))
+			.map(line => line.match(/\S+/g) || []);
+		return {lines, addressColumn, pidColumn};
+	} catch {
+		if (process.platform === 'win32') {
+			throw new Error('Could not list network connections');
+		}
 
-	const lines = stdout
-		.split('\n')
-		.filter(line => isProtocol(line))
-		.map(line => line.match(/\S+/g) || []);
-	return {lines, addressColumn, pidColumn};
+		return lsofGetList();
+	}
 };
 
 export async function portToPid(portOrOptions) {
