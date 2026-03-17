@@ -46,7 +46,9 @@ const linux = async () => {
 
 const windows = async () => {
 	const {stdout} = await execa('netstat', ['-ano']);
-	return {stdout, addressColumn: 1, pidColumn: 4};
+	// PID column is 4 for TCP (which has a State column) and 3 for UDP (which doesn't).
+	// Starting the scan at 3 lets findPidInLine handle both.
+	return {stdout, addressColumn: 1, pidColumn: 3};
 };
 
 const isProtocol = value => /^\s*(tcp|udp)/i.test(value);
@@ -96,9 +98,9 @@ const parsePid = pid => {
 	}
 };
 
-// Search for PID starting from pidColumn, handling process names with spaces
-// When process names contain spaces (e.g., "next-server (v16.1.1)"), the ss output
-// gets split into multiple columns, so we need to search across all columns from pidColumn
+// The loop is load-bearing: it scans from pidColumn onward instead of checking a fixed index.
+// This handles Linux process names with spaces (e.g., "next-server (v16.1.1)") that shift the
+// PID column in ss output, and Windows TCP lines that have more columns than UDP lines.
 const findPidInLine = (line, pidColumn) => {
 	for (const column of line.slice(pidColumn)) {
 		const pid = parsePid(column);
