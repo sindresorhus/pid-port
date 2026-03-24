@@ -39,6 +39,26 @@ const lsofFallback = async port => {
 	return stdout;
 };
 
+const lsofGetList = async () => {
+	let stdout;
+	try {
+		({stdout} = await execa('lsof', ['-nP', '-iTCP', '-iUDP']));
+	} catch (error) {
+		if (error.exitCode !== 1 || error.stdout !== '') {
+			throw error;
+		}
+
+		stdout = '';
+	}
+
+	const lines = stdout
+		.split('\n')
+		.slice(1) // Skip header
+		.map(line => line.match(/\S+/g) || [])
+		.filter(columns => columns.length > 8 && /^(tcp|udp)$/i.test(columns[7]));
+	return {lines, addressColumn: 8, pidColumn: 1};
+};
+
 const linux = async () => {
 	const {stdout} = await execa('ss', ['-tunlp']);
 	return {stdout, addressColumn: 4, pidColumn: 6};
@@ -106,9 +126,22 @@ const findPidInLine = (line, pidColumn) => {
 			return pid;
 		}
 	}
+
+	// Windows: UDP lines lack the State column that TCP has.
+	// TCP: [Proto, LocalAddr, ForeignAddr, State, PID] → 5 columns
+	// UDP: [Proto, LocalAddr, ForeignAddr, PID]          → 4 columns
+	// When pidColumn=4 targets TCP but the line is UDP, search the last column.
+	if (pidColumn > 0 && line.length > pidColumn) {
+		const last = line[line.length - 1];
+		if (last && /^\d+$/.test(last)) {
+			return Number.parseInt(last, 10);
+		}
+	}
 };
 
 const parseAddress = address => {
+	address = address.split('->')[0];
+
 	// Match "...:123" or "... .123" with the port at the end; keep host greedy to the last separator
 	const match = /^(?<host>.+?)[.:](?<port>\d+)$/.exec(address);
 	const rawHost = match?.groups?.host ?? address;
@@ -199,8 +232,7 @@ const validatePid = pid => {
 };
 
 const filterPortLines = (port, {lines, addressColumn}, hostFilter) => {
-	const regex = new RegExp(`[.:]${port}$`);
-	const matchingPorts = lines.filter(line => regex.test(line[addressColumn]));
+	const matchingPorts = lines.filter(line => parseAddress(line[addressColumn]).port === port);
 	return applyHostFilter(matchingPorts, addressColumn, hostFilter);
 };
 
@@ -243,35 +275,20 @@ const platformImplementations = {darwin: macos, linux};
 const implementation = platformImplementations[process.platform] ?? windows;
 
 const getList = async () => {
-	let result;
 	try {
-		result = await implementation();
-	} catch (error) {
-		// Primary tool (ss on Linux, netstat on macOS) not available — fall back to lsof
-		if (process.platform === 'linux' || process.platform === 'darwin') {
-			try {
-				const stdout = await lsofFallback();
-				// lsof columns: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
-				const lines = stdout
-					.split('\n')
-					.filter(line => isProtocol(line))
-					.map(line => line.match(/\S+/g) || []);
-				return {lines, addressColumn: 7, pidColumn: 1};
-			} catch {
-				// Both primary and lsof failed — rethrow original error
-			}
+		const {stdout, addressColumn, pidColumn} = await implementation();
+		const lines = stdout
+			.split('\n')
+			.filter(line => isProtocol(line))
+			.map(line => line.match(/\S+/g) || []);
+		return {lines, addressColumn, pidColumn};
+	} catch {
+		if (process.platform === 'win32') {
+			throw new Error('Could not list network connections');
 		}
 
-		throw error;
+		return lsofGetList();
 	}
-
-	const {stdout, addressColumn, pidColumn} = result;
-
-	const lines = stdout
-		.split('\n')
-		.filter(line => isProtocol(line))
-		.map(line => line.match(/\S+/g) || []);
-	return {lines, addressColumn, pidColumn};
 };
 
 export async function portToPid(portOrOptions) {
