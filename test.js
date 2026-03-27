@@ -1,5 +1,4 @@
 import process from 'node:process';
-import dgram from 'node:dgram';
 import http from 'node:http';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,6 +7,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {promisify} from 'node:util';
+import {pathToFileURL} from 'node:url';
 import getPort from 'get-port';
 import {
 	portToPid,
@@ -445,21 +445,22 @@ test('Linux: process names with spaces do not break PID extraction', async t => 
 	}
 });
 
-test('UDP ports resolve to a PID', async () => {
-	const socket = dgram.createSocket('udp4');
-
-	await new Promise((resolve, reject) => {
-		socket.bind(0, '127.0.0.1', error => (error ? reject(error) : resolve()));
-	});
-
-	const {port} = socket.address();
+test('Windows: PID parsing works for both TCP and UDP netstat rows', async () => {
+	const temporaryDirectory = await fs.mkdtemp(path.join(process.cwd(), '.ai-temporary-'));
+	const source = await fs.readFile(new URL('index.js', import.meta.url), 'utf8');
+	const modulePath = path.join(temporaryDirectory, 'index-internals.mjs');
 
 	try {
-		const bindings = await portBindings(port, {host: '127.0.0.1'});
-		const pids = bindings.map(b => b.pid);
-		assert.ok(pids.includes(process.pid), `Expected process ${process.pid} among bindings for UDP port ${port}, got: ${JSON.stringify(bindings)}`);
+		await fs.writeFile(modulePath, `${source}\nexport {findPidInLine};\n`);
+		const {findPidInLine} = await import(pathToFileURL(modulePath).href);
+
+		const tcpColumns = 'TCP 127.0.0.1:58_566 127.0.0.1:5173 ESTABLISHED 67_932'.replaceAll('_', '').match(/\S+/g);
+		const udpColumns = 'UDP 127.0.0.1:1900 *:* 19_048'.replaceAll('_', '').match(/\S+/g);
+
+		assert.equal(findPidInLine(tcpColumns, 3), 67_932);
+		assert.equal(findPidInLine(udpColumns, 3), 19_048);
 	} finally {
-		socket.close();
+		await fs.rm(temporaryDirectory, {recursive: true, force: true});
 	}
 });
 
@@ -514,12 +515,13 @@ test('IPv6 localhost support', async () => {
 });
 
 test('host regex escaping', async () => {
-	const port = await getPort();
-	const server = createServer().listen(port, '127.0.0.1');
+	const server = await startServer(0);
+	const address = server.address();
 
-	await new Promise(resolve => {
-		server.on('listening', resolve);
-	});
+	assert.notEqual(address, null);
+	assert.equal(typeof address, 'object');
+
+	const {port} = address;
 
 	// Test that dots in host are treated literally, not as regex wildcards
 	// If regex escaping is broken, '127x0x0x1' might incorrectly match '127.0.0.1'
