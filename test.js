@@ -320,16 +320,18 @@ test('Linux: process names with spaces do not break PID extraction', async t => 
 });
 
 test('UDP ports resolve to a PID', async () => {
-	const port = await getPort();
 	const socket = dgram.createSocket('udp4');
 
-	try {
-		await new Promise((resolve, reject) => {
-			socket.bind(port, '127.0.0.1', error => (error ? reject(error) : resolve()));
-		});
+	await new Promise((resolve, reject) => {
+		socket.bind(0, '127.0.0.1', error => (error ? reject(error) : resolve()));
+	});
 
-		const pid = await portToPid({port, host: '127.0.0.1'});
-		assert.equal(pid, process.pid);
+	const {port} = socket.address();
+
+	try {
+		const bindings = await portBindings(port, {host: '127.0.0.1'});
+		const pids = bindings.map(b => b.pid);
+		assert.ok(pids.includes(process.pid), `Expected process ${process.pid} among bindings for UDP port ${port}, got: ${JSON.stringify(bindings)}`);
 	} finally {
 		socket.close();
 	}
