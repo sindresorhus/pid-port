@@ -1,4 +1,5 @@
 import process from 'node:process';
+import dgram from 'node:dgram';
 import http from 'node:http';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
@@ -441,6 +442,24 @@ test('Linux: process names with spaces do not break PID extraction', async t => 
 		process.env.PATH = originalPath;
 		server?.close();
 		await fs.rm(temporaryDirectory, {recursive: true, force: true});
+	}
+});
+
+test('UDP ports resolve to a PID', async () => {
+	const socket = dgram.createSocket('udp4');
+
+	await new Promise((resolve, reject) => {
+		socket.bind(0, '127.0.0.1', error => (error ? reject(error) : resolve()));
+	});
+
+	const {port} = socket.address();
+
+	try {
+		const bindings = await portBindings(port, {host: '127.0.0.1'});
+		const pids = bindings.map(b => b.pid);
+		assert.ok(pids.includes(process.pid), `Expected process ${process.pid} among bindings for UDP port ${port}, got: ${JSON.stringify(bindings)}`);
+	} finally {
+		socket.close();
 	}
 });
 
