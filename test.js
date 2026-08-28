@@ -18,6 +18,18 @@ import {
 
 const execFileAsync = promisify(execFile);
 
+const loadPidParser = async testContext => {
+	const temporaryDirectory = await fs.mkdtemp(path.join(process.cwd(), '.ai-temporary-'));
+	testContext.after(async () => {
+		await fs.rm(temporaryDirectory, {recursive: true, force: true});
+	});
+
+	const source = await fs.readFile(new URL('index.js', import.meta.url), 'utf8');
+	const modulePath = path.join(temporaryDirectory, 'index-internals.mjs');
+	await fs.writeFile(modulePath, `${source}\nexport {findPidInLine};\n`);
+	return import(pathToFileURL(modulePath).href);
+};
+
 const createServer = () => http.createServer((request, response) => {
 	response.end();
 });
@@ -445,23 +457,107 @@ test('Linux: process names with spaces do not break PID extraction', async t => 
 	}
 });
 
-test('Windows: PID parsing works for both TCP and UDP netstat rows', async () => {
-	const temporaryDirectory = await fs.mkdtemp(path.join(process.cwd(), '.ai-temporary-'));
-	const source = await fs.readFile(new URL('index.js', import.meta.url), 'utf8');
-	const modulePath = path.join(temporaryDirectory, 'index-internals.mjs');
+test('Windows: PID parsing works for both TCP and UDP netstat rows', async testContext => {
+	const {findPidInLine} = await loadPidParser(testContext);
+	const tcpColumns = 'TCP 127.0.0.1:58_566 127.0.0.1:5173 ESTABLISHED 67_932'.replaceAll('_', '').match(/\S+/g);
+	const udpColumns = 'UDP 127.0.0.1:1900 *:* 19_048'.replaceAll('_', '').match(/\S+/g);
+	const unavailablePidColumns = 'UDP 127.0.0.1:1900 *:* 0'.match(/\S+/g);
 
-	try {
-		await fs.writeFile(modulePath, `${source}\nexport {findPidInLine};\n`);
-		const {findPidInLine} = await import(pathToFileURL(modulePath).href);
+	assert.equal(findPidInLine(tcpColumns, 3, 'windows'), 67_932);
+	assert.equal(findPidInLine(udpColumns, 3, 'windows'), 19_048);
+	assert.equal(findPidInLine(unavailablePidColumns, 3, 'windows'), undefined);
+});
 
-		const tcpColumns = 'TCP 127.0.0.1:58_566 127.0.0.1:5173 ESTABLISHED 67_932'.replaceAll('_', '').match(/\S+/g);
-		const udpColumns = 'UDP 127.0.0.1:1900 *:* 19_048'.replaceAll('_', '').match(/\S+/g);
+test('macOS: PID parsing supports current process names and legacy bare PIDs', async testContext => {
+	const {findPidInLine} = await loadPidParser(testContext);
+	const tcpRow = processColumn => `tcp4 0 0 127.0.0.1.8000 *.* LISTEN 0 0 131072 131072 ${processColumn} 00100 00000006`.match(/\S+/g);
+	const udpRow = processColumn => `udp4 0 0 127.0.0.1.8000 *.* 0 0 131072 131072 ${processColumn} 00100 00000006`.match(/\S+/g);
+	const legacyTcpRowWithByteCounts = processColumn => `tcp4 0 0 127.0.0.1.8000 *.* LISTEN 0 0 131072 131072 ${processColumn} 0 00100 00000006`.match(/\S+/g);
+	const legacyUdpRowWithByteCounts = processColumn => `udp4 0 0 127.0.0.1.8000 *.* 0 0 131072 131072 ${processColumn} 0 00100 00000006`.match(/\S+/g);
+	const legacyTcpRow = processColumn => `tcp4 0 0 127.0.0.1.8000 *.* LISTEN 131072 131072 ${processColumn} 0 00100 00000006`.match(/\S+/g);
+	const legacyUdpRow = processColumn => `udp4 0 0 127.0.0.1.8000 *.* 131072 131072 ${processColumn} 0 00100 00000006`.match(/\S+/g);
 
-		assert.equal(findPidInLine(tcpColumns, 3), 67_932);
-		assert.equal(findPidInLine(udpColumns, 3), 19_048);
-	} finally {
-		await fs.rm(temporaryDirectory, {recursive: true, force: true});
-	}
+	assert.equal(findPidInLine(tcpRow('python3.12:76594'), 10, 'macos'), 76_594);
+	assert.equal(findPidInLine(tcpRow('2.1.250:77076'), 10, 'macos'), 77_076);
+	assert.equal(findPidInLine(tcpRow('3proxy:76594'), 10, 'macos'), 76_594);
+	assert.equal(findPidInLine(tcpRow('worker_2:54321'), 10, 'macos'), 54_321);
+	assert.equal(findPidInLine(tcpRow('com.docker.backe:64422'), 10, 'macos'), 64_422);
+	assert.equal(findPidInLine(tcpRow('app:worker:12345'), 10, 'macos'), 12_345);
+	assert.equal(findPidInLine(tcpRow(':76594'), 10, 'macos'), 76_594);
+	assert.equal(findPidInLine(tcpRow('76594'), 10, 'macos'), undefined);
+	assert.equal(findPidInLine(legacyTcpRowWithByteCounts('76594'), 10, 'macosLegacy'), 76_594);
+	assert.equal(findPidInLine(legacyUdpRowWithByteCounts('76594'), 10, 'macosLegacy'), 76_594);
+	assert.equal(findPidInLine(legacyTcpRow('76594'), 8, 'macosLegacy'), 76_594);
+	assert.equal(findPidInLine(udpRow('python3.12:76594'), 10, 'macos'), 76_594);
+	assert.equal(findPidInLine(legacyUdpRow('76594'), 8, 'macosLegacy'), 76_594);
+});
+
+test('macOS: PID parsing supports process names with spaces', async testContext => {
+	const {findPidInLine} = await loadPidParser(testContext);
+	const tcpRow = processColumn => `tcp6 0 0 ::1.8000 *.* LISTEN 0 0 131072 131072 ${processColumn} 00100 00000006`.match(/\S+/g);
+	const udpRow = processColumn => `udp46 0 0 *.8000 *.* 0 0 131072 131072 ${processColumn} 00100 00000006`.match(/\S+/g);
+
+	assert.equal(findPidInLine(tcpRow('Codex (Service):71296'), 10, 'macos'), 71_296);
+	assert.equal(findPidInLine(tcpRow('worker:80 child:71296'), 10, 'macos'), 71_296);
+	assert.equal(findPidInLine(tcpRow('123 worker:71296'), 10, 'macos'), 71_296);
+	assert.equal(findPidInLine(udpRow('Codex (Service):71296'), 10, 'macos'), 71_296);
+});
+
+test('macOS: PID zero is treated as unavailable', async testContext => {
+	const {findPidInLine} = await loadPidParser(testContext);
+	const tcpRow = 'tcp4 0 0 127.0.0.1.8000 *.* LISTEN 0 0 131072 131072 :0 00100 00000006 00000000003ee95a'.match(/\S+/g);
+	const udpRow = 'udp4 0 0 127.0.0.1.8000 *.* 0 0 131072 131072 :0 00100 00000006 00000000003ee95a'.match(/\S+/g);
+	const legacyTcpRowWithByteCounts = 'tcp4 0 0 127.0.0.1.8000 *.* LISTEN 0 0 131072 131072 0 0 00100 00000006 00000000003ee95a'.match(/\S+/g);
+	const legacyUdpRowWithByteCounts = 'udp4 0 0 127.0.0.1.8000 *.* 0 0 131072 131072 0 0 00100 00000006 00000000003ee95a'.match(/\S+/g);
+	const legacyTcpRow = 'tcp4 0 0 127.0.0.1.8000 *.* LISTEN 131072 131072 0 0 00100 00000006'.match(/\S+/g);
+	const legacyUdpRow = 'udp4 0 0 127.0.0.1.8000 *.* 131072 131072 0 0 00100 00000006'.match(/\S+/g);
+
+	assert.equal(findPidInLine(tcpRow, 10, 'macos'), undefined);
+	assert.equal(findPidInLine(udpRow, 10, 'macos'), undefined);
+	assert.equal(findPidInLine(legacyTcpRowWithByteCounts, 10, 'macosLegacy'), undefined);
+	assert.equal(findPidInLine(legacyUdpRowWithByteCounts, 10, 'macosLegacy'), undefined);
+	assert.equal(findPidInLine(legacyTcpRow, 8, 'macosLegacy'), undefined);
+	assert.equal(findPidInLine(legacyUdpRow, 8, 'macosLegacy'), undefined);
+});
+
+test('Linux: authoritative pid field wins across split process names', async testContext => {
+	const {findPidInLine} = await loadPidParser(testContext);
+	const row = processDescription => `tcp LISTEN 0 511 127.0.0.1:8000 *:* ${processDescription}`.match(/\S+/g);
+
+	assert.equal(findPidInLine(row('users:(("node",pid=1337,fd=3))'), 6, 'linux'), 1337);
+	assert.equal(findPidInLine(row('users:(("next-server (v16.1.1)",pid=1337,fd=3))'), 6, 'linux'), 1337);
+	assert.equal(findPidInLine(row('users:(("python3.12:80 worker",pid=1337,fd=3))'), 6, 'linux'), 1337);
+	assert.equal(findPidInLine(row('users:(("worker:80 child",pid=1337,fd=3))'), 6, 'linux'), 1337);
+	assert.equal(findPidInLine(row('users:(("2.1.250:80 worker",pid=1337,fd=3))'), 6, 'linux'), 1337);
+	assert.equal(findPidInLine(row('users:(("pid=80 worker",pid=1337,fd=3))'), 6, 'linux'), 1337);
+	assert.equal(findPidInLine(row('users:(("worker pid=80",pid=1337,fd=3))'), 6, 'linux'), 1337);
+});
+
+test('Linux: PID parsing supports the legacy process description', async testContext => {
+	const {findPidInLine} = await loadPidParser(testContext);
+	const row = 'tcp LISTEN 0 511 127.0.0.1:8000 *:* users:(("node",1337,fd=3))'.match(/\S+/g);
+
+	assert.equal(findPidInLine(row, 6, 'linux'), 1337);
+});
+
+test('Linux: PID parsing ignores process-title numbers and unavailable PIDs', async testContext => {
+	const {findPidInLine} = await loadPidParser(testContext);
+	const row = 'tcp LISTEN 0 511 127.0.0.1:8000 *:* users:(("worker:80 child"))'.match(/\S+/g);
+	const unavailablePidRow = 'tcp LISTEN 0 511 127.0.0.1:8000 *:* users:(("kernel",pid=0,fd=3))'.match(/\S+/g);
+
+	assert.equal(findPidInLine(row, 6, 'linux'), undefined);
+	assert.equal(findPidInLine(unavailablePidRow, 6, 'linux'), undefined);
+});
+
+test('lsof: PID parsing uses the dedicated PID column', async testContext => {
+	const {findPidInLine} = await loadPidParser(testContext);
+	const row = 'node 12345 user 20u IPv4 0x123 0t0 TCP 127.0.0.1:8080 (LISTEN)'.match(/\S+/g);
+	const rowWithoutPid = 'node - user 20u IPv4 12345 0t0 TCP 127.0.0.1:8080 (LISTEN)'.match(/\S+/g);
+	const rowWithUnavailablePid = 'node 0 user 20u IPv4 0x123 0t0 TCP 127.0.0.1:8080 (LISTEN)'.match(/\S+/g);
+
+	assert.equal(findPidInLine(row, 1, 'lsof'), 12_345);
+	assert.equal(findPidInLine(rowWithoutPid, 1, 'lsof'), undefined);
+	assert.equal(findPidInLine(rowWithUnavailablePid, 1, 'lsof'), undefined);
 });
 
 test('error messages', async () => {

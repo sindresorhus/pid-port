@@ -14,16 +14,17 @@ const macos = async () => {
 
 	// Column headers are on the second line
 	const headerStart = tcp.indexOf('\n') + 1;
-	const header = tcp.slice(headerStart, tcp.indexOf('\n', headerStart));
+	const headerColumns = new Set(tcp.slice(headerStart, tcp.indexOf('\n', headerStart)).match(/\S+/g));
 
 	return {
 		stdout: [tcp, udp].join('\n'),
 		addressColumn: 3,
+		pidFormat: headerColumns.has('process:pid') ? 'macos' : 'macosLegacy',
 		// Some versions of macOS print two extra columns for rxbytes and
 		// txbytes before pid. Unfortunately headers can't be parsed because
 		// they're space separated but some contain spaces, so we use this
 		// heuristic to distinguish the two netstat versions.
-		pidColumn: header.includes('rxbytes') ? 10 : 8,
+		pidColumn: headerColumns.has('rxbytes') ? 10 : 8,
 	};
 };
 
@@ -56,19 +57,34 @@ const lsofGetList = async () => {
 		.slice(1) // Skip header
 		.map(line => line.match(/\S+/g) || [])
 		.filter(columns => columns.length > 8 && /^(tcp|udp)$/i.test(columns[7]));
-	return {lines, addressColumn: 8, pidColumn: 1};
+	return {
+		lines,
+		addressColumn: 8,
+		pidColumn: 1,
+		pidFormat: 'lsof',
+	};
 };
 
 const linux = async () => {
 	const {stdout} = await execa('ss', ['-tunlp']);
-	return {stdout, addressColumn: 4, pidColumn: 6};
+	return {
+		stdout,
+		addressColumn: 4,
+		pidColumn: 6,
+		pidFormat: 'linux',
+	};
 };
 
 const windows = async () => {
 	const {stdout} = await execa('netstat', ['-ano']);
 	// PID column is 4 for TCP (which has a State column) and 3 for UDP (which doesn't).
 	// Starting the scan at 3 lets findPidInLine handle both.
-	return {stdout, addressColumn: 1, pidColumn: 3};
+	return {
+		stdout,
+		addressColumn: 1,
+		pidColumn: 3,
+		pidFormat: 'windows',
+	};
 };
 
 const isProtocol = value => /^\s*(tcp|udp)/i.test(value);
@@ -93,40 +109,45 @@ const normalizeHost = host => {
 	return normalizedHost;
 };
 
-const parsePid = pid => {
-	if (typeof pid !== 'string') {
-		return;
-	}
-
-	// Linux ss: users:(("node",pid=1337,fd=123))
-	const linuxMatch = /pid=(?<pid>\d+)/.exec(pid);
-	if (linuxMatch?.groups?.pid) {
-		return Number.parseInt(linuxMatch.groups.pid, 10);
-	}
-
-	// MacOS netstat - handles both old format (macOS 15 and older) and new format (macOS 26+)
-	// Old format: "1337" or ",1337" or ",pid=1337"
-	// New format: "prog:1337" (macOS 26+)
-	const macMatch = /(?:^|",|",pid=|[A-Za-z]+:)(?<pid>\d+)/.exec(pid);
-	if (macMatch?.groups?.pid) {
-		return Number.parseInt(macMatch.groups.pid, 10);
-	}
-
-	// Windows netstat -ano: 1337
-	if (/^\d+$/.test(pid)) {
-		return Number.parseInt(pid, 10);
-	}
+const parsePid = value => {
+	const pid = Number.parseInt(value, 10);
+	return pid > 0 ? pid : undefined;
 };
 
-// The loop is load-bearing: it scans from pidColumn onward instead of checking a fixed index.
-// This handles Linux process names with spaces (e.g., "next-server (v16.1.1)") that shift the
-// PID column in ss output, and Windows TCP lines that have more columns than UDP lines.
-const findPidInLine = (line, pidColumn) => {
-	for (const column of line.slice(pidColumn)) {
-		const pid = parsePid(column);
-		if (pid !== undefined) {
-			return pid;
+const findPidInLine = (line, pidColumn, pidFormat) => {
+	// TCP rows on macOS have a state column, while UDP rows leave it blank and lose it during tokenization.
+	const isMacosUdpRow = pidFormat.startsWith('macos') && line[0]?.toLowerCase().startsWith('udp');
+	const pidColumns = line.slice(isMacosUdpRow ? pidColumn - 1 : pidColumn);
+
+	if (pidFormat === 'linux') {
+		const processDescription = pidColumns.join(' ');
+		const match = /",pid=(?<pid>\d+)/.exec(processDescription) ?? /",(?<pid>\d+)/.exec(processDescription);
+		return match ? parsePid(match.groups.pid) : undefined;
+	}
+
+	if (pidFormat === 'macos') {
+		for (const column of pidColumns.toReversed()) {
+			const match = /:(?<pid>\d+)$/.exec(column);
+			if (match) {
+				return parsePid(match.groups.pid);
+			}
 		}
+
+		return undefined;
+	}
+
+	if (pidFormat === 'macosLegacy' || pidFormat === 'lsof') {
+		return /^\d+$/.test(pidColumns[0]) ? parsePid(pidColumns[0]) : undefined;
+	}
+
+	if (pidFormat === 'windows') {
+		for (const column of pidColumns) {
+			if (/^\d+$/.test(column)) {
+				return parsePid(column);
+			}
+		}
+
+		return undefined;
 	}
 };
 
@@ -227,7 +248,7 @@ const filterPortLines = (port, {lines, addressColumn}, hostFilter) => {
 	return applyHostFilter(matchingPorts, addressColumn, hostFilter);
 };
 
-const getPort = async (port, {lines, addressColumn, pidColumn}, host) => {
+const getPort = async (port, {lines, addressColumn, pidColumn, pidFormat}, host) => {
 	validatePort(port);
 	const hostFilter = createHostFilter(host);
 	const matchingPorts = filterPortLines(port, {lines, addressColumn}, hostFilter);
@@ -239,7 +260,7 @@ const getPort = async (port, {lines, addressColumn, pidColumn}, host) => {
 	// Sort with localhost priority
 	sortByHostPriority(matchingPorts, line => line[addressColumn]);
 
-	const pid = findPidInLine(matchingPorts[0], pidColumn);
+	const pid = findPidInLine(matchingPorts[0], pidColumn, pidFormat);
 	if (pid !== undefined) {
 		return pid;
 	}
@@ -267,12 +288,17 @@ const implementation = platformImplementations[process.platform] ?? windows;
 
 const getList = async () => {
 	try {
-		const {stdout, addressColumn, pidColumn} = await implementation();
+		const {stdout, addressColumn, pidColumn, pidFormat} = await implementation();
 		const lines = stdout
 			.split('\n')
 			.filter(line => isProtocol(line))
 			.map(line => line.match(/\S+/g) || []);
-		return {lines, addressColumn, pidColumn};
+		return {
+			lines,
+			addressColumn,
+			pidColumn,
+			pidFormat,
+		};
 	} catch {
 		if (process.platform === 'win32') {
 			throw new Error('Could not list network connections');
@@ -332,7 +358,7 @@ export async function pidToPorts(pid) {
 
 export async function allPortsWithPid(options) {
 	validateHost(options?.host);
-	const {lines, addressColumn, pidColumn} = await getList();
+	const {lines, addressColumn, pidColumn, pidFormat} = await getList();
 	const hostFilter = createHostFilter(options?.host);
 
 	const resultMap = new Map();
@@ -342,7 +368,7 @@ export async function allPortsWithPid(options) {
 
 	for (const line of filteredLines) {
 		const {port} = parseAddress(line[addressColumn]);
-		const pid = findPidInLine(line, pidColumn);
+		const pid = findPidInLine(line, pidColumn, pidFormat);
 
 		if (port !== undefined && pid !== undefined) {
 			resultMap.set(port, pid);
@@ -356,7 +382,7 @@ export async function portBindings(port, options) {
 	validatePort(port);
 	validateHost(options?.host);
 
-	const {lines, addressColumn, pidColumn} = await getList();
+	const {lines, addressColumn, pidColumn, pidFormat} = await getList();
 	const hostFilter = createHostFilter(options?.host);
 	const matchingPorts = filterPortLines(port, {lines, addressColumn}, hostFilter);
 
@@ -369,7 +395,7 @@ export async function portBindings(port, options) {
 	const bindings = [];
 	for (const line of matchingPorts) {
 		const {host} = parseAddress(line[addressColumn]);
-		const pid = findPidInLine(line, pidColumn);
+		const pid = findPidInLine(line, pidColumn, pidFormat);
 
 		if (pid === undefined) {
 			continue;
