@@ -104,12 +104,18 @@ const parsePid = pid => {
 		return Number.parseInt(linuxMatch.groups.pid, 10);
 	}
 
-	// MacOS netstat - handles both old format (macOS 15 and older) and new format (macOS 26+)
-	// Old format: "1337" or ",1337" or ",pid=1337"
-	// New format: "prog:1337" (macOS 26+)
-	const macMatch = /(?:^|",|",pid=|[A-Za-z]+:)(?<pid>\d+)/.exec(pid);
+	// MacOS netstat, old format (macOS 15 and older): "1337", ",1337" or ",pid=1337"
+	const macMatch = /(?:^|",|",pid=)(?<pid>\d+)/.exec(pid);
 	if (macMatch?.groups?.pid) {
 		return Number.parseInt(macMatch.groups.pid, 10);
+	}
+
+	// MacOS netstat, new format (macOS 26+): "prog:1337". The program name is not
+	// limited to letters, so anchor on the last colon instead of matching the name:
+	// "python3.12:1337" and "com.docker.backe:1337" are both valid.
+	const macNamedMatch = /^\S*[^\s:]:(?<pid>\d+)$/.exec(pid);
+	if (macNamedMatch?.groups?.pid) {
+		return Number.parseInt(macNamedMatch.groups.pid, 10);
 	}
 
 	// Windows netstat -ano: 1337

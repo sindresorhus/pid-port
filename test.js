@@ -464,6 +464,31 @@ test('Windows: PID parsing works for both TCP and UDP netstat rows', async () =>
 	}
 });
 
+test('macOS: program names containing digits do not break PID extraction', async () => {
+	const temporaryDirectory = await fs.mkdtemp(path.join(process.cwd(), '.ai-temporary-'));
+	const source = await fs.readFile(new URL('index.js', import.meta.url), 'utf8');
+	const modulePath = path.join(temporaryDirectory, 'index-internals.mjs');
+
+	try {
+		await fs.writeFile(modulePath, `${source}\nexport {findPidInLine};\n`);
+		const {findPidInLine} = await import(pathToFileURL(modulePath).href);
+
+		// MacOS 26 `netstat -anv -p tcp` prints rxbytes/txbytes, putting the process
+		// column at index 10. Everything after it is flags, so a program name that
+		// fails to parse makes the scan return a flags value as if it were a PID.
+		const row = processColumn => `tcp4 0 0 127.0.0.1.8000 *.* LISTEN 0 0 131072 131072 ${processColumn} 00100 00000006`.match(/\S+/g);
+
+		assert.equal(findPidInLine(row('python3.12:76594'), 10), 76_594);
+		assert.equal(findPidInLine(row('com.docker.backe:64422'), 10), 64_422);
+		assert.equal(findPidInLine(row('tor:1364'), 10), 1364);
+
+		// MacOS 15 and older put a bare PID in the process column
+		assert.equal(findPidInLine(row('76594'), 10), 76_594);
+	} finally {
+		await fs.rm(temporaryDirectory, {recursive: true, force: true});
+	}
+});
+
 test('error messages', async () => {
 	// Test validation errors first
 	await assert.rejects(
