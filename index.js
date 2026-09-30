@@ -3,6 +3,12 @@ import {execa} from 'execa';
 
 const netstat = async type => {
 	const {stdout} = await execa('netstat', ['-anv', '-p', type]);
+
+	// `netstat` prints nothing, not even a header, both when the table is empty and when it cannot read it (macOS 27). Both cases go to the `lsof` fallback. Checking each protocol separately matters because a non-empty UDP listing would otherwise hide an unreadable TCP listing from the fallback.
+	if (stdout === '') {
+		throw new Error(`\`netstat -p ${type}\` printed nothing`);
+	}
+
 	return stdout;
 };
 
@@ -278,19 +284,27 @@ const getList = async () => {
 			.split('\n')
 			.filter(line => isProtocol(line))
 			.map(line => line.match(/\S+/gv) || []);
-		return {
-			lines,
-			addressColumn,
-			pidColumn,
-			pidFormat,
-		};
-	} catch {
-		if (process.platform === 'win32') {
-			throw new Error('Could not list network connections');
-		}
 
-		return lsofGetList();
+		if (lines.length > 0) {
+			return {
+				lines,
+				addressColumn,
+				pidColumn,
+				pidFormat,
+			};
+		}
+	} catch {
+		// A tool that cannot list connections is handled by the `lsof` fallback below, the same as a tool that lists none.
 	}
+
+	// A tool that exits 0 while listing no connections is as unusable as one that fails outright, and telling
+	// the caller that every port is free is worse than a slower lookup. `netstat -anv -p tcp` exits 0 with no
+	// output at all when it cannot read the connection table, which is how the 21 lookup tests failed on macOS.
+	if (process.platform === 'win32') {
+		throw new Error('Could not list network connections');
+	}
+
+	return lsofGetList();
 };
 
 export async function portToPid(portOrOptions) {

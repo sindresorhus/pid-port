@@ -320,6 +320,30 @@ test('empty lsof fallback behaves like an empty connection list', {timeout: test
 	await assert.rejects(portBindings(12_345), {message: 'Could not find any processes using port `12345` on localhost'});
 });
 
+test('macOS: empty TCP netstat output falls back to lsof even when UDP has rows', {timeout: testTimeout}, async t => {
+	if (process.platform !== 'darwin') {
+		t.skip('macOS only');
+		return;
+	}
+
+	await shadowCommands(t, {
+		netstat: `#!/bin/sh
+if [ "$3" = "tcp" ]; then
+	exit 0
+fi
+
+cat <<'EOF'
+Active Internet connections (including servers)
+Proto Recv-Q Send-Q  Local Address          Foreign Address        (state)          rxbytes      txbytes  rhiwat  shiwat          process:pid    state  options           gencnt    flags   flags1 usecnt rtncnt fltrs
+udp4       0      0  127.0.0.1.5353         *.*                                          0            0  786896    9216      mDNSResponder:1  00000 00000000 0000000000000001 00000000 00000000      1      0 000001
+EOF
+`,
+		lsof: lsofOutput,
+	});
+
+	assert.equal(await portToPid(49_152), 12_345);
+});
+
 test('lsof fallback resolves LISTEN sockets without arrow notation', {timeout: testTimeout}, async t => {
 	if (process.platform === 'win32') {
 		t.skip('lsof is not available on Windows');
