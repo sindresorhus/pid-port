@@ -14,7 +14,7 @@ const macos = async () => {
 
 	// Column headers are on the second line
 	const headerStart = tcp.indexOf('\n') + 1;
-	const headerColumns = new Set(tcp.slice(headerStart, tcp.indexOf('\n', headerStart)).match(/\S+/g));
+	const headerColumns = new Set(tcp.slice(headerStart, tcp.indexOf('\n', headerStart)).match(/\S+/gv));
 
 	return {
 		stdout: [tcp, udp].join('\n'),
@@ -31,10 +31,7 @@ const macos = async () => {
 const lsofFallback = async port => {
 	// Only used when columns do not contain PID info due to privileges
 	// -nP: no DNS, numeric ports; -i: filter; -sTCP:LISTEN to prefer listeners
-	const args = ['-nP'];
-	if (port) {
-		args.push('-i', `:${port}`);
-	}
+	const args = port ? ['-nP', '-i', `:${port}`] : ['-nP'];
 
 	const {stdout} = await execa('lsof', args);
 	return stdout;
@@ -55,8 +52,8 @@ const lsofGetList = async () => {
 	const lines = stdout
 		.split('\n')
 		.slice(1) // Skip header
-		.map(line => line.match(/\S+/g) || [])
-		.filter(columns => columns.length > 8 && /^(tcp|udp)$/i.test(columns[7]));
+		.map(line => line.match(/\S+/gv) || [])
+		.filter(columns => columns.length > 8 && /^(?:tcp|udp)$/iv.test(columns[7]));
 	return {
 		lines,
 		addressColumn: 8,
@@ -87,29 +84,22 @@ const windows = async () => {
 	};
 };
 
-const isProtocol = value => /^\s*(tcp|udp)/i.test(value);
+const isProtocol = value => /^\s*(?:tcp|udp)/iv.test(value);
 
 const stripIpv6Brackets = host =>
 	host?.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
 
 const normalizeHost = host => {
 	const normalizedHost = stripIpv6Brackets(host);
-	if (normalizedHost === 'localhost') {
+	if (normalizedHost === 'localhost' || normalizedHost === '::ffff:127.0.0.1') {
 		return '127.0.0.1';
 	}
 
-	if (normalizedHost === '::ffff:127.0.0.1') {
-		return '127.0.0.1';
-	}
-
-	if (normalizedHost === '::') {
-		return '*';
-	}
-
-	return normalizedHost;
+	return normalizedHost === '::' ? '*' : normalizedHost;
 };
 
 const parsePid = value => {
+	// eslint-disable-next-line unicorn/prefer-number-coercion -- `parseInt` stops at the first non-digit, while `Number()` reads the whole string, so `1e3` and `0x1f` would become 1000 and 31 instead of 1 and 0.
 	const pid = Number.parseInt(value, 10);
 	return pid > 0 ? pid : undefined;
 };
@@ -121,13 +111,13 @@ const findPidInLine = (line, pidColumn, pidFormat) => {
 
 	if (pidFormat === 'linux') {
 		const processDescription = pidColumns.join(' ');
-		const match = /",pid=(?<pid>\d+)/.exec(processDescription) ?? /",(?<pid>\d+)/.exec(processDescription);
+		const match = /",pid=(?<pid>\d+)/v.exec(processDescription) ?? /",(?<pid>\d+)/v.exec(processDescription);
 		return match ? parsePid(match.groups.pid) : undefined;
 	}
 
 	if (pidFormat === 'macos') {
 		for (const column of pidColumns.toReversed()) {
-			const match = /:(?<pid>\d+)$/.exec(column);
+			const match = /:(?<pid>\d+)$/v.exec(column);
 			if (match) {
 				return parsePid(match.groups.pid);
 			}
@@ -137,27 +127,30 @@ const findPidInLine = (line, pidColumn, pidFormat) => {
 	}
 
 	if (pidFormat === 'macosLegacy' || pidFormat === 'lsof') {
-		return /^\d+$/.test(pidColumns[0]) ? parsePid(pidColumns[0]) : undefined;
+		return /^\d+$/v.test(pidColumns[0]) ? parsePid(pidColumns[0]) : undefined;
 	}
 
-	if (pidFormat === 'windows') {
-		for (const column of pidColumns) {
-			if (/^\d+$/.test(column)) {
-				return parsePid(column);
-			}
-		}
-
+	if (pidFormat !== 'windows') {
 		return undefined;
 	}
+
+	for (const column of pidColumns) {
+		if (/^\d+$/v.test(column)) {
+			return parsePid(column);
+		}
+	}
+
+	return undefined;
 };
 
 const parseAddress = address => {
-	address = address.split('->')[0];
+	address = address.split('->', 1)[0];
 
 	// Match "...:123" or "... .123" with the port at the end; keep host greedy to the last separator
-	const match = /^(?<host>.+?)[.:](?<port>\d+)$/.exec(address);
+	const match = /^(?<host>.+?)[.:](?<port>\d+)$/v.exec(address);
 	const rawHost = match?.groups?.host ?? address;
 	const host = normalizeHost(rawHost);
+	// eslint-disable-next-line unicorn/prefer-number-coercion -- Same reason as in `parsePid`: `Number()` would read a trailing `e` or `x` suffix as an exponent or hex literal.
 	const port = match?.groups?.port ? Number.parseInt(match.groups.port, 10) : undefined;
 	return {host, port};
 };
@@ -166,15 +159,11 @@ const isLocalhostAddress = host => host === '127.0.0.1' || host === '::1';
 
 const createHostFilter = host => {
 	const normalizedHost = host === undefined ? undefined : normalizeHost(host);
-	if (normalizedHost === '*' || normalizedHost === '0.0.0.0' || normalizedHost === '::') {
+	if (['*', '0.0.0.0', '::'].includes(normalizedHost)) {
 		return {type: 'all'};
 	}
 
-	if (normalizedHost === undefined) {
-		return {type: 'localhost'};
-	}
-
-	return {type: 'specific', host: normalizedHost};
+	return normalizedHost === undefined ? {type: 'localhost'} : {type: 'specific', host: normalizedHost};
 };
 
 const applyHostFilter = (lines, addressColumn, hostFilter) => {
@@ -196,6 +185,7 @@ const applyHostFilter = (lines, addressColumn, hostFilter) => {
 	});
 };
 
+// eslint-disable-next-line unicorn/no-array-sort -- This comparator is not a total order (`127.0.0.1` beats `::1` no matter what else is in the list, so `a < b < c < a` is possible). `toSorted` and `sort` disagree on the result for such an input, so switching would silently change which PID `portToPid` returns for a port bound on more than one interface. Fixing the comparator is a separate change.
 const sortByHostPriority = (items, getAddress) => items.sort((a, b) => {
 	const addressA = getAddress(a);
 	const addressB = getAddress(b);
@@ -205,12 +195,8 @@ const sortByHostPriority = (items, getAddress) => items.sort((a, b) => {
 		return -1;
 	}
 
-	if (addressA.startsWith('::1') && addressB.startsWith('127.0.0.1')) {
-		return 1;
-	}
-
 	// For other addresses, sort alphabetically
-	return addressA.localeCompare(addressB);
+	return addressA.startsWith('::1') && addressB.startsWith('127.0.0.1') ? 1 : addressA.localeCompare(addressB);
 });
 
 const createPortErrorMessage = (port, hostFilter) => {
@@ -218,15 +204,11 @@ const createPortErrorMessage = (port, hostFilter) => {
 		return `Could not find a process that uses port \`${port}\` on localhost`;
 	}
 
-	if (hostFilter.type === 'specific') {
-		return `Could not find a process that uses port \`${port}\` on host \`${hostFilter.host}\``;
-	}
-
-	return `Could not find a process that uses port \`${port}\``;
+	return hostFilter.type === 'specific' ? `Could not find a process that uses port \`${port}\` on host \`${hostFilter.host}\`` : `Could not find a process that uses port \`${port}\``;
 };
 
 const validatePort = (port, context = 'a TCP/UDP port') => {
-	if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+	if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
 		throw new TypeError(`Expected ${context} between 1 and 65535, got ${port}`);
 	}
 };
@@ -238,6 +220,7 @@ const validateHost = host => {
 };
 
 const validatePid = pid => {
+	// eslint-disable-next-line unicorn/prefer-number-is-safe-integer -- `Number.isSafeInteger` would also reject values above 2^53, which are integers and currently reach the lookup instead of throwing.
 	if (!Number.isInteger(pid)) {
 		throw new TypeError(`Expected an integer, got ${typeof pid}`);
 	}
@@ -258,9 +241,9 @@ const getPort = async (port, {lines, addressColumn, pidColumn, pidFormat}, host)
 	}
 
 	// Sort with localhost priority
-	sortByHostPriority(matchingPorts, line => line[addressColumn]);
+	const sortedPorts = sortByHostPriority(matchingPorts, line => line[addressColumn]);
 
-	const pid = findPidInLine(matchingPorts[0], pidColumn, pidFormat);
+	const pid = findPidInLine(sortedPorts[0], pidColumn, pidFormat);
 	if (pid !== undefined) {
 		return pid;
 	}
@@ -271,8 +254,10 @@ const getPort = async (port, {lines, addressColumn, pidColumn, pidFormat}, host)
 			const out = await lsofFallback(port);
 
 			// Match ":PORT" and capture PID column (more precise)
-			const match = new RegExp(`[\\[\\]:.]${port}\\s.*?\\s+(\\d+)\\s+`).exec(out);
+			// eslint-disable-next-line unicorn/prefer-string-raw -- `String.raw` would keep both characters of each `\\`, so the pattern would match a literal backslash and never match a port.
+			const match = new RegExp(`[\\[\\]:.]${port}\\s.*?\\s+(\\d+)\\s+`, 'v').exec(out);
 			if (match?.[1]) {
+				// eslint-disable-next-line unicorn/prefer-number-coercion -- Same reason as in `parsePid`: the digits come from command output, so a partial parse is the safe reading.
 				return Number.parseInt(match[1], 10);
 			}
 		} catch {
@@ -292,7 +277,7 @@ const getList = async () => {
 		const lines = stdout
 			.split('\n')
 			.filter(line => isProtocol(line))
-			.map(line => line.match(/\S+/g) || []);
+			.map(line => line.match(/\S+/gv) || []);
 		return {
 			lines,
 			addressColumn,

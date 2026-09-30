@@ -36,8 +36,20 @@
 		"execa": "^9.6.0"
 	},
 	"devDependencies": {
-		"get-port": "^7.1.0",
-		"typescript": "^5.9.2",
-		"xo": "^1.2.2"
-	}
+		"get-port": "^7.2.0",
+		"typescript": "^6.0.3",
+		"xo": "^5.0.1"
+	},
+	"xo": [
+		{
+			"files": [
+				"test.js"
+			],
+			"rules": {
+				"node-test/prefer-test-context-assert": "off",
+				"node-test/no-conditional-assertion": "off",
+				"node-test/no-process-env-mutation": "off"
+			}
+		}
+	]
 }
